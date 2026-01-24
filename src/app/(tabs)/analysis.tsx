@@ -1,0 +1,520 @@
+import React from 'react';
+import { View, Text, ScrollView, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import {
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  Lock,
+  Sparkles,
+  TrendingUp,
+  Globe,
+  PieChart,
+  Lightbulb,
+  ChevronRight,
+} from 'lucide-react-native';
+import { usePortfolioStore } from '@/lib/store';
+import { useEntitlementStatus } from '@/lib/premium-store';
+import { CATEGORY_INFO, SECTOR_INFO, COUNTRY_INFO, Sector, CountryCode } from '@/lib/types';
+import { cn } from '@/lib/cn';
+
+function LockedAnalysisScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  return (
+    <View className="flex-1 bg-[#0A0A0F]">
+      <LinearGradient
+        colors={['#1a1a2e', '#0A0A0F']}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 500 }}
+      />
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ paddingTop: insets.top + 20 }} className="px-5">
+          <View className="items-center pt-12">
+            <View className="w-[100px] h-[100px] rounded-full overflow-hidden">
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                style={{
+                  width: 100,
+                  height: 100,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Lock size={40} color="white" />
+              </LinearGradient>
+            </View>
+
+            <Text className="text-white text-2xl font-bold mt-8 text-center">
+              Unlock Portfolio Analysis
+            </Text>
+            <Text className="text-gray-400 text-center mt-3 px-8 leading-6">
+              Get AI-powered insights to optimize your portfolio, identify risks, and discover diversification opportunities.
+            </Text>
+          </View>
+
+          {/* Features Preview */}
+          <View className="mt-10">
+            <FeaturePreview
+              icon={<Shield size={24} color="#10B981" />}
+              title="Risk Score Analysis"
+              description="Understand your portfolio's overall risk level"
+            />
+            <FeaturePreview
+              icon={<Globe size={24} color="#6366F1" />}
+              title="Geographic Concentration"
+              description="See how your investments are spread globally"
+            />
+            <FeaturePreview
+              icon={<PieChart size={24} color="#EC4899" />}
+              title="Sector Exposure"
+              description="Identify overexposure to specific sectors"
+            />
+            <FeaturePreview
+              icon={<Lightbulb size={24} color="#F59E0B" />}
+              title="Smart Suggestions"
+              description="Personalized recommendations to improve returns"
+            />
+          </View>
+
+          {/* CTA */}
+          <View className="mt-10 px-5">
+            <Pressable
+              onPress={() => {
+                console.log('[Premium Debug] Upgrade button clicked:', {
+                  location: 'analysis-tab-locked',
+                  isPremium: false,
+                  timestamp: new Date().toISOString(),
+                });
+                router.push('/premium');
+              }}
+            >
+              <LinearGradient
+                colors={['#F59E0B', '#D97706']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  borderRadius: 16,
+                  padding: 20,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Sparkles size={20} color="white" />
+                <Text className="text-white font-bold text-lg ml-2">Upgrade to Premium</Text>
+              </LinearGradient>
+            </Pressable>
+
+            <Text className="text-gray-500 text-center text-sm mt-4">
+              Starting at $4.99/month
+            </Text>
+          </View>
+
+          {/* Blurred Preview */}
+          <View className="mt-10 opacity-40">
+            <Text className="text-white text-lg font-semibold mb-4 px-5">Preview</Text>
+            <View className="bg-white/5 rounded-2xl mx-5 p-4">
+              <View className="flex-row items-center">
+                <View className="w-16 h-16 rounded-full bg-amber-500/20 items-center justify-center">
+                  <Text className="text-amber-500 text-2xl font-bold">7</Text>
+                </View>
+                <View className="ml-4 flex-1">
+                  <Text className="text-white font-semibold">Risk Score</Text>
+                  <Text className="text-gray-400 text-sm">Moderate-High Risk</Text>
+                </View>
+              </View>
+              <View className="h-2 rounded-full bg-black/30 mt-4 overflow-hidden">
+                <View className="h-full w-[70%] bg-amber-500 rounded-full" />
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function PremiumAnalysisScreen() {
+  const insets = useSafeAreaInsets();
+  const assets = usePortfolioStore((s) => s.assets);
+
+  // Compute risk analysis with useMemo using real asset data
+  const riskAnalysis = React.useMemo(() => {
+    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
+
+    // Category concentration
+    const categoryConcentration: Record<string, number> = {};
+    assets.forEach((asset) => {
+      const value = asset.currentPrice * asset.quantity;
+      const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
+      categoryConcentration[asset.category] = (categoryConcentration[asset.category] || 0) + percentage;
+    });
+
+    const assetTypeConcentration = Object.entries(categoryConcentration)
+      .map(([name, percentage]) => ({
+        name: CATEGORY_INFO[name as keyof typeof CATEGORY_INFO]?.label || name,
+        percentage,
+        riskLevel: (percentage > 40 ? 'high' : percentage > 25 ? 'medium' : 'low') as 'low' | 'medium' | 'high',
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Real sector concentration from asset data
+    const sectorTotals: Record<string, number> = {};
+    assets.forEach((asset) => {
+      const sector = asset.sector || 'other';
+      const value = asset.currentPrice * asset.quantity;
+      sectorTotals[sector] = (sectorTotals[sector] || 0) + value;
+    });
+
+    const sectorConcentration = Object.entries(sectorTotals)
+      .map(([sector, value]) => ({
+        name: SECTOR_INFO[sector as Sector]?.label || sector,
+        percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
+        riskLevel: (value / totalValue * 100 > 40 ? 'high' : value / totalValue * 100 > 25 ? 'medium' : 'low') as 'low' | 'medium' | 'high',
+      }))
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 6);
+
+    // Real geographic concentration from asset data
+    const countryTotals: Record<string, number> = {};
+    assets.forEach((asset) => {
+      const country = asset.country || 'OTHER';
+      const value = asset.currentPrice * asset.quantity;
+      countryTotals[country] = (countryTotals[country] || 0) + value;
+    });
+
+    const geographicConcentration = Object.entries(countryTotals)
+      .map(([country, value]) => ({
+        name: COUNTRY_INFO[country as CountryCode]?.name || country,
+        flag: COUNTRY_INFO[country as CountryCode]?.flag || '🏳️',
+        percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
+        riskLevel: (value / totalValue * 100 > 60 ? 'high' : value / totalValue * 100 > 40 ? 'medium' : 'low') as 'low' | 'medium' | 'high',
+      }))
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 6);
+
+    // Generate suggestions based on real data
+    const suggestions: string[] = [];
+
+    const topSector = sectorConcentration[0];
+    if (topSector && topSector.percentage > 40) {
+      suggestions.push(`Your ${topSector.name.toLowerCase()} exposure is ${topSector.percentage.toFixed(0)}%. Consider diversifying into other sectors to reduce concentration risk.`);
+    }
+
+    const topCountry = geographicConcentration[0];
+    if (topCountry && topCountry.percentage > 60) {
+      suggestions.push(`${topCountry.percentage.toFixed(0)}% of your portfolio is in ${topCountry.name}. Adding international exposure could reduce geographic risk.`);
+    }
+
+    const stocksPercent = categoryConcentration['stocks'] || 0;
+    const bondsPercent = categoryConcentration['bonds'] || 0;
+    const fixedIncomePercent = categoryConcentration['fixed_income'] || 0;
+
+    if (stocksPercent > 50 && (bondsPercent + fixedIncomePercent) < 15) {
+      suggestions.push('Your equity allocation is high relative to fixed income. Adding bonds can reduce volatility during market downturns.');
+    }
+
+    if (!categoryConcentration['gold'] && !categoryConcentration['physical_metals']) {
+      suggestions.push('Consider adding 5-10% allocation to gold or precious metals as an inflation hedge.');
+    }
+
+    // Calculate overall risk score
+    const highRiskCount = [...assetTypeConcentration, ...sectorConcentration, ...geographicConcentration]
+      .filter(c => c.riskLevel === 'high').length;
+
+    const overallRiskScore = Math.min(10, Math.max(1, 3 + highRiskCount * 1.5));
+
+    return {
+      overallRiskScore,
+      sectorConcentration,
+      geographicConcentration,
+      assetTypeConcentration,
+      suggestions,
+    };
+  }, [assets]);
+
+  const getRiskColor = (score: number) => {
+    if (score <= 3) return '#10B981';
+    if (score <= 6) return '#F59E0B';
+    return '#EF4444';
+  };
+
+  const getRiskLabel = (score: number) => {
+    if (score <= 3) return 'Low Risk';
+    if (score <= 6) return 'Moderate Risk';
+    return 'High Risk';
+  };
+
+  const getRiskLevelColor = (level: 'low' | 'medium' | 'high') => {
+    if (level === 'low') return '#10B981';
+    if (level === 'medium') return '#F59E0B';
+    return '#EF4444';
+  };
+
+  return (
+    <View className="flex-1 bg-[#0A0A0F]">
+      <LinearGradient
+        colors={['#1a1a2e', '#0A0A0F']}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 400 }}
+      />
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ paddingTop: insets.top }} className="px-5">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-white text-2xl font-bold">Analysis</Text>
+            <View className="flex-row items-center bg-amber-500/20 px-3 py-1 rounded-full">
+              <Sparkles size={14} color="#F59E0B" />
+              <Text className="text-amber-500 text-sm font-medium ml-1">Premium</Text>
+            </View>
+          </View>
+
+          {/* Risk Score Card */}
+          <View className="mt-8">
+            <LinearGradient
+              colors={['rgba(99, 102, 241, 0.15)', 'rgba(139, 92, 246, 0.1)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 24, padding: 24 }}
+            >
+              <View className="flex-row items-center">
+                <View
+                  className="w-20 h-20 rounded-full items-center justify-center"
+                  style={{ backgroundColor: getRiskColor(riskAnalysis.overallRiskScore) + '20' }}
+                >
+                  <Text
+                    className="text-3xl font-bold"
+                    style={{ color: getRiskColor(riskAnalysis.overallRiskScore) }}
+                  >
+                    {riskAnalysis.overallRiskScore}
+                  </Text>
+                </View>
+                <View className="ml-4 flex-1">
+                  <Text className="text-white text-xl font-semibold">Overall Risk Score</Text>
+                  <Text style={{ color: getRiskColor(riskAnalysis.overallRiskScore) }} className="mt-1">
+                    {getRiskLabel(riskAnalysis.overallRiskScore)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Risk Meter */}
+              <View className="mt-6">
+                <View className="h-3 rounded-full bg-black/30 overflow-hidden">
+                  <View
+                    style={{
+                      height: '100%',
+                      width: `${riskAnalysis.overallRiskScore * 10}%`,
+                      backgroundColor: getRiskColor(riskAnalysis.overallRiskScore),
+                      borderRadius: 999,
+                    }}
+                  />
+                </View>
+                <View className="flex-row justify-between mt-2">
+                  <Text className="text-gray-500 text-xs">Low</Text>
+                  <Text className="text-gray-500 text-xs">Moderate</Text>
+                  <Text className="text-gray-500 text-xs">High</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Sector Concentration */}
+          <View className="mt-8">
+            <View className="flex-row items-center mb-4">
+              <TrendingUp size={20} color="#6366F1" />
+              <Text className="text-white text-lg font-semibold ml-2">Sector Exposure</Text>
+            </View>
+
+            <View className="bg-white/5 rounded-2xl p-4">
+              {riskAnalysis.sectorConcentration.map((sector, index) => (
+                <View
+                  key={sector.name}
+                  className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                >
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white">{sector.name}</Text>
+                      {sector.riskLevel === 'high' && (
+                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                      )}
+                    </View>
+                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${sector.percentage}%`,
+                          backgroundColor: getRiskLevelColor(sector.riskLevel),
+                        }}
+                      />
+                    </View>
+                  </View>
+                  <Text
+                    className="w-16 text-right font-medium"
+                    style={{ color: getRiskLevelColor(sector.riskLevel) }}
+                  >
+                    {sector.percentage.toFixed(1)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Geographic Concentration */}
+          <View className="mt-8">
+            <View className="flex-row items-center mb-4">
+              <Globe size={20} color="#EC4899" />
+              <Text className="text-white text-lg font-semibold ml-2">Geographic Exposure</Text>
+            </View>
+
+            <View className="bg-white/5 rounded-2xl p-4">
+              {riskAnalysis.geographicConcentration.map((region, index) => (
+                <View
+                  key={region.name}
+                  className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                >
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white">{region.name}</Text>
+                      {region.riskLevel === 'high' && (
+                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                      )}
+                    </View>
+                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${region.percentage}%`,
+                          backgroundColor: getRiskLevelColor(region.riskLevel),
+                        }}
+                      />
+                    </View>
+                  </View>
+                  <Text
+                    className="w-16 text-right font-medium"
+                    style={{ color: getRiskLevelColor(region.riskLevel) }}
+                  >
+                    {region.percentage.toFixed(1)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Asset Type Concentration */}
+          <View className="mt-8">
+            <View className="flex-row items-center mb-4">
+              <PieChart size={20} color="#14B8A6" />
+              <Text className="text-white text-lg font-semibold ml-2">Asset Type Breakdown</Text>
+            </View>
+
+            <View className="bg-white/5 rounded-2xl p-4">
+              {riskAnalysis.assetTypeConcentration.map((type, index) => (
+                <View
+                  key={type.name}
+                  className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                >
+                  <View className="flex-1">
+                    <View className="flex-row items-center">
+                      <Text className="text-white">{type.name}</Text>
+                      {type.riskLevel === 'high' && (
+                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                      )}
+                    </View>
+                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(type.percentage, 100)}%`,
+                          backgroundColor: getRiskLevelColor(type.riskLevel),
+                        }}
+                      />
+                    </View>
+                  </View>
+                  <Text
+                    className="w-16 text-right font-medium"
+                    style={{ color: getRiskLevelColor(type.riskLevel) }}
+                  >
+                    {type.percentage.toFixed(1)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Smart Suggestions */}
+          <View className="mt-8">
+            <View className="flex-row items-center mb-4">
+              <Lightbulb size={20} color="#F59E0B" />
+              <Text className="text-white text-lg font-semibold ml-2">Smart Suggestions</Text>
+            </View>
+
+            {riskAnalysis.suggestions.map((suggestion, index) => (
+              <View
+                key={index}
+                className="bg-white/5 rounded-2xl p-4 mb-3"
+              >
+                <View className="flex-row">
+                  <View className="w-8 h-8 rounded-full bg-amber-500/20 items-center justify-center">
+                    <Text className="text-amber-500 font-bold">{index + 1}</Text>
+                  </View>
+                  <Text className="text-gray-300 flex-1 ml-3 leading-6">{suggestion}</Text>
+                </View>
+              </View>
+            ))}
+
+            {riskAnalysis.suggestions.length === 0 && (
+              <View className="bg-emerald-500/10 rounded-2xl p-4 flex-row items-center">
+                <CheckCircle size={24} color="#10B981" />
+                <Text className="text-emerald-400 ml-3 flex-1">
+                  Your portfolio is well-diversified! Keep up the good work.
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function FeaturePreview({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <View className="flex-row items-center bg-white/5 rounded-2xl p-4 mx-5 mb-3">
+      <View className="w-12 h-12 rounded-full bg-white/10 items-center justify-center">{icon}</View>
+      <View className="flex-1 ml-4">
+        <Text className="text-white font-semibold">{title}</Text>
+        <Text className="text-gray-400 text-sm mt-1">{description}</Text>
+      </View>
+      <ChevronRight size={16} color="#6B7280" />
+    </View>
+  );
+}
+
+export default function AnalysisScreen() {
+  const { isPremium } = useEntitlementStatus();
+
+  if (isPremium) {
+    return <PremiumAnalysisScreen />;
+  }
+
+  return <LockedAnalysisScreen />;
+}
