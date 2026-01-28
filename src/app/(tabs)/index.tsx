@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { TrendingUp, TrendingDown, ChevronRight, Sparkles, Bell, Eye, EyeOff, AlertTriangle, Globe, PieChart, Shield, Calendar, PiggyBank, RefreshCw, DollarSign } from 'lucide-react-native';
 import { PolarChart, Pie } from 'victory-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { usePortfolioStore } from '@/lib/store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
@@ -536,7 +537,7 @@ export default function DashboardScreen() {
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
             {/* Simple treemap-style mosaic (tap to drill down) */}
             {sectorAllocation.length > 0 && (
-              <View className="mb-4">
+              <Animated.View entering={FadeInDown.delay(120)} className="mb-4">
                 <View className="flex-row overflow-hidden rounded-2xl" style={{ height: 110 }}>
                   {[sectorAllocation[0], sectorAllocation[1], sectorAllocation[2]]
                     .filter(Boolean)
@@ -587,7 +588,7 @@ export default function DashboardScreen() {
                     </Pressable>
                   ))}
                 </View>
-              </View>
+              </Animated.View>
             )}
 
             {sectorAllocation.map((item, index) => (
@@ -630,7 +631,7 @@ export default function DashboardScreen() {
 
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
             {allocation.length > 0 && (
-              <View className="items-center mb-4">
+              <Animated.View entering={FadeInDown.delay(140)} className="items-center mb-4">
                 <View style={{ width: 180, height: 180 }}>
                   <PolarChart
                     data={allocation.slice(0, 8).map((a) => ({
@@ -648,7 +649,7 @@ export default function DashboardScreen() {
                 <Text style={{ color: theme.textTertiary }} className="text-xs mt-2">
                   Tap a row below to filter holdings.
                 </Text>
-              </View>
+              </Animated.View>
             )}
             {allocation.slice(0, 5).map((item, index) => (
               <Pressable

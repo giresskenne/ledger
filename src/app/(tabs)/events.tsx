@@ -740,7 +740,7 @@ export default function EventsScreen() {
           </View>
 
           {/* View mode toggle */}
-          <View className="flex-row mt-4">
+          <Animated.View entering={FadeInDown.delay(140)} className="flex-row mt-4">
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync();
@@ -769,7 +769,7 @@ export default function EventsScreen() {
                 Calendar
               </Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </View>
 
         {/* Filter chips */}
@@ -804,7 +804,7 @@ export default function EventsScreen() {
         </Animated.View>
 
         {viewMode === 'calendar' ? (
-          <View className="px-5 mb-6">
+          <Animated.View entering={FadeInDown.delay(180)} className="px-5 mb-6">
             <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surface }}>
               <RNCalendar
                 theme={{
@@ -842,7 +842,7 @@ export default function EventsScreen() {
                 ))
               )}
             </View>
-          </View>
+          </Animated.View>
         ) : (
           <>
             {/* Summary Card */}
