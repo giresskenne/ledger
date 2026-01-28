@@ -50,6 +50,9 @@ interface NotificationsState {
 
   // Event management
   addEvent: (event: Omit<PortfolioEvent, 'id' | 'isRead' | 'createdAt'>) => void;
+  syncGeneratedEvents: (
+    generated: Array<Omit<PortfolioEvent, 'isRead' | 'createdAt'>>
+  ) => void;
   markEventAsRead: (eventId: string) => void;
   markAllAsRead: () => void;
   removeEvent: (eventId: string) => void;
@@ -98,6 +101,37 @@ export const useNotificationsStore = create<NotificationsState>()(
         set((state) => ({
           events: [newEvent, ...state.events],
         }));
+      },
+
+      syncGeneratedEvents: (generated) => {
+        const generatedPrefixes = ['maturity_', 'contrib_', 'assetcontrib_', 'rebalance_'];
+        const isGenerated = (id: string) => generatedPrefixes.some((p) => id.startsWith(p));
+
+        const now = Date.now();
+
+        set((state) => {
+          const existingById = new Map(state.events.map((e) => [e.id, e]));
+
+          // Keep non-generated events, and keep generated events only if they're still present in the new snapshot.
+          const preservedNonGenerated = state.events.filter((e) => !isGenerated(e.id));
+
+          const mergedGenerated: PortfolioEvent[] = generated.map((event) => {
+            const prev = existingById.get(event.id);
+            const createdAt = prev?.createdAt ?? new Date().toISOString();
+            const defaultRead =
+              new Date(event.date).getTime() - now > 1000 * 60 * 60 * 24 * 30;
+
+            return {
+              ...event,
+              createdAt,
+              isRead: prev?.isRead ?? defaultRead,
+            };
+          });
+
+          return {
+            events: [...mergedGenerated, ...preservedNonGenerated],
+          };
+        });
       },
 
       markEventAsRead: (eventId) => {

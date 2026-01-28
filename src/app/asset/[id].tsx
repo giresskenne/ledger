@@ -351,7 +351,9 @@ export default function AssetDetailScreen() {
                     {COUNTRY_INFO[asset.country as CountryCode]?.flag || '🏳️'}
                   </Text>
                   <Text className="text-white">
-                    {COUNTRY_INFO[asset.country as CountryCode]?.name || asset.country}
+                    {asset.country === 'OTHER'
+                      ? asset.countryName || 'Other'
+                      : COUNTRY_INFO[asset.country as CountryCode]?.name || asset.country}
                   </Text>
                 </View>
               )}

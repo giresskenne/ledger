@@ -63,6 +63,7 @@ interface PortfolioState {
   addAsset: (asset: Omit<Asset, 'id' | 'lastUpdated'>) => void;
   updateAsset: (id: string, updates: Partial<Asset>) => void;
   deleteAsset: (id: string) => void;
+  applyAssetContribution: (params: { assetId: string; amount: number; date: string }) => void;
   setPremium: (isPremium: boolean) => void;
   setCurrency: (currency: Currency) => void;
   resetStore: () => Promise<void>;
@@ -181,6 +182,78 @@ export const usePortfolioStore = create<PortfolioState>()(
               : asset
           ),
         }));
+      },
+
+      applyAssetContribution: ({ assetId, amount, date }) => {
+        const amt = Number(amount);
+        if (!Number.isFinite(amt) || amt <= 0) return;
+
+        const asset = get().assets.find((a) => a.id === assetId);
+        if (!asset) return;
+
+        const unitPrice = Number(asset.currentPrice);
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
+
+        // Cash behaves like a "balance" (quantity is typically 1).
+        if (asset.category === 'cash') {
+          const qty = Math.max(1, Number(asset.quantity) || 1);
+          const currentTotal = asset.currentPrice * qty;
+          const investedTotal = asset.purchasePrice * qty;
+          const nextCurrentTotal = currentTotal + amt;
+          const nextInvestedTotal = investedTotal + amt;
+
+          const nextCurrentPerUnit = nextCurrentTotal / qty;
+          const nextInvestedPerUnit = nextInvestedTotal / qty;
+
+          const nextHistory = asset.isManual
+            ? [...(asset.valueHistory ?? []), { date, value: nextCurrentPerUnit }]
+            : asset.valueHistory;
+
+          get().updateAsset(asset.id, {
+            currentPrice: nextCurrentPerUnit,
+            purchasePrice: nextInvestedPerUnit,
+            valueHistory: nextHistory,
+          });
+          return;
+        }
+
+        // For "per-unit priced" assets, treat contribution as buying more units at current price.
+        const addedQty = amt / unitPrice;
+        if (!Number.isFinite(addedQty) || addedQty <= 0) return;
+
+        // If it's a listed asset with a ticker, record an explicit BUY transaction.
+        if (isListedAsset(asset.category, asset.ticker)) {
+          const existingTxns = toTxnFromLegacy(asset);
+          const newTxn: AssetTransaction = {
+            id: `txn-${Date.now()}`,
+            type: 'BUY',
+            date,
+            quantity: addedQty,
+            price: unitPrice,
+            fees: 0,
+          };
+          const updatedTxns = [...existingTxns, newTxn];
+
+          const { totalQty, avgCost, firstDate } = computePositionFromTxns(updatedTxns);
+
+          get().updateAsset(asset.id, {
+            transactions: updatedTxns,
+            quantity: totalQty,
+            purchasePrice: avgCost,
+            purchaseDate: firstDate,
+          });
+          return;
+        }
+
+        const prevQty = Math.max(0, Number(asset.quantity) || 0);
+        const nextQty = prevQty + addedQty;
+        const prevCost = (Number(asset.purchasePrice) || 0) * prevQty;
+        const nextAvgCost = nextQty > 0 ? (prevCost + amt) / nextQty : asset.purchasePrice;
+
+        get().updateAsset(asset.id, {
+          quantity: nextQty,
+          purchasePrice: nextAvgCost,
+        });
       },
 
       deleteAsset: (id) => {

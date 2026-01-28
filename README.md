@@ -522,7 +522,7 @@ EXPO_PUBLIC_ALPHAVANTAGE_API_KEY=your_api_key_here
 
 1. **See Live Data**: Go to Holdings tab, add a stock (e.g., "AAPL")
 2. **Check Status**: View the provider badge showing data freshness
-3. **View Logs**: Check LOGS tab in Vibecode app for API calls
+3. **View Logs**: Check the LOGS tab in your dev app for API calls
 4. **Test Offline**: Disconnect network, data comes from cache
 5. **Clear Cache**: Settings tab has cache management options (when implemented)
 
@@ -613,7 +613,7 @@ Graceful error handling throughout the app:
 
 ### App Store Assets
 
-Required for submission (create via Vibecode "Share" > "Submit to App Store"):
+Required for submission (create via "Share" > "Submit to App Store"):
 - App icon (1024x1024)
 - Screenshots for various device sizes
 - App description and keywords

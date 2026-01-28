@@ -30,6 +30,7 @@ import { AssetLimitBanner, PremiumPaywall } from '@/components/PremiumPaywall';
 import { usePriceDisplay } from '@/lib/market-data/hooks';
 import { StatusIndicator } from '@/components/DataAttribution';
 import { NoAssetsEmptyState, NoSearchResultsEmptyState } from '@/components/EmptyState';
+import { useTheme } from '@/lib/theme-store';
 
 const CATEGORY_ICONS: Record<AssetCategory, React.ReactNode> = {
   stocks: <TrendingUp size={18} color="#10B981" />,
@@ -50,6 +51,7 @@ type FilterOption = AssetCategory | 'all';
 export default function HoldingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortOption>('value');
   const [filterCategory, setFilterCategory] = React.useState<FilterOption>('all');
@@ -117,10 +119,15 @@ export default function HoldingsScreen() {
   const categories: FilterOption[] = ['all', ...Object.keys(CATEGORY_INFO) as AssetCategory[]];
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
-      <View style={{ paddingTop: insets.top }} className="px-5 pb-4 border-b border-white/10">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View
+        style={{ paddingTop: insets.top, borderBottomColor: theme.border, borderBottomWidth: 1 }}
+        className="px-5 pb-4"
+      >
         <Animated.View entering={FadeInDown.delay(100)} className="flex-row items-center justify-between">
-          <Text className="text-white text-2xl font-bold">Holdings</Text>
+          <Text style={{ color: theme.text }} className="text-2xl font-bold">
+            Holdings
+          </Text>
           <Pressable
             onPress={handleAddAsset}
             className="w-10 h-10 bg-indigo-600 rounded-full items-center justify-center"
@@ -132,18 +139,20 @@ export default function HoldingsScreen() {
         {/* Search Bar */}
         <Animated.View
           entering={FadeInDown.delay(200)}
-          className="mt-4 flex-row items-center bg-white/10 rounded-xl px-4 py-3"
+          className="mt-4 flex-row items-center rounded-xl px-4 py-3"
+          style={{ backgroundColor: theme.surfaceHover }}
         >
-          <Search size={18} color="#9CA3AF" />
+          <Search size={18} color={theme.textTertiary} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search assets, tickers, platforms..."
-            placeholderTextColor="#6B7280"
-            className="flex-1 ml-3 text-white"
+            placeholderTextColor={theme.textTertiary}
+            className="flex-1 ml-3"
+            style={{ color: theme.text }}
           />
           <Pressable onPress={() => setShowFilters(!showFilters)}>
-            <Filter size={18} color={showFilters ? '#6366F1' : '#9CA3AF'} />
+            <Filter size={18} color={showFilters ? theme.primary : theme.textTertiary} />
           </Pressable>
         </Animated.View>
 
@@ -151,18 +160,23 @@ export default function HoldingsScreen() {
         {showFilters && (
           <Animated.View entering={FadeInDown.delay(100)} className="mt-4">
             {/* Sort Options */}
-            <Text className="text-gray-400 text-xs mb-2">Sort by</Text>
+            <Text style={{ color: theme.textSecondary }} className="text-xs mb-2">
+              Sort by
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
               {(['value', 'gain', 'name', 'category'] as SortOption[]).map((option) => (
                 <Pressable
                   key={option}
                   onPress={() => setSortBy(option)}
-                  className={cn(
-                    'px-4 py-2 rounded-full mr-2',
-                    sortBy === option ? 'bg-indigo-600' : 'bg-white/10'
-                  )}
+                  className="px-4 py-2 rounded-full mr-2"
+                  style={{
+                    backgroundColor: sortBy === option ? theme.primary : theme.surfaceHover,
+                  }}
                 >
-                  <Text className={cn('text-sm capitalize', sortBy === option ? 'text-white' : 'text-gray-400')}>
+                  <Text
+                    style={{ color: sortBy === option ? '#FFFFFF' : theme.textSecondary }}
+                    className="text-sm capitalize"
+                  >
                     {option}
                   </Text>
                 </Pressable>
@@ -170,18 +184,26 @@ export default function HoldingsScreen() {
             </ScrollView>
 
             {/* Category Filters */}
-            <Text className="text-gray-400 text-xs mt-4 mb-2">Category</Text>
+            <Text style={{ color: theme.textSecondary }} className="text-xs mt-4 mb-2">
+              Category
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
               {categories.map((category) => (
                 <Pressable
                   key={category}
                   onPress={() => setFilterCategory(category)}
-                  className={cn(
-                    'px-4 py-2 rounded-full mr-2',
-                    filterCategory === category ? 'bg-indigo-600' : 'bg-white/10'
-                  )}
+                  className="px-4 py-2 rounded-full mr-2"
+                  style={{
+                    backgroundColor:
+                      filterCategory === category ? theme.primary : theme.surfaceHover,
+                  }}
                 >
-                  <Text className={cn('text-sm', filterCategory === category ? 'text-white' : 'text-gray-400')}>
+                  <Text
+                    style={{
+                      color: filterCategory === category ? '#FFFFFF' : theme.textSecondary,
+                    }}
+                    className="text-sm"
+                  >
                     {category === 'all' ? 'All' : CATEGORY_INFO[category].label}
                   </Text>
                 </Pressable>
@@ -203,10 +225,10 @@ export default function HoldingsScreen() {
 
         {/* Summary */}
         <Animated.View entering={FadeInDown.delay(300)} className="flex-row items-center justify-between mb-4">
-          <Text className="text-gray-400">
+          <Text style={{ color: theme.textSecondary }}>
             {filteredAssets.length} {filteredAssets.length === 1 ? 'asset' : 'assets'}
           </Text>
-          <Text className="text-gray-400">
+          <Text style={{ color: theme.textSecondary }}>
             Total: {formatCurrency(filteredAssets.reduce((sum, a) => sum + a.currentPrice * a.quantity, 0))}
           </Text>
         </Animated.View>
@@ -227,14 +249,17 @@ export default function HoldingsScreen() {
 
         {filteredAssets.length === 0 && assets.length > 0 && !searchQuery && filterCategory !== 'all' && (
           <Animated.View entering={FadeInDown.delay(300)} className="items-center py-12">
-            <Text className="text-gray-400 text-center">
+            <Text style={{ color: theme.textSecondary }} className="text-center">
               No {CATEGORY_INFO[filterCategory as AssetCategory].label.toLowerCase()} in your portfolio
             </Text>
             <Pressable
               onPress={() => setFilterCategory('all')}
-              className="mt-4 bg-white/10 px-6 py-3 rounded-full"
+              className="mt-4 px-6 py-3 rounded-full"
+              style={{ backgroundColor: theme.surfaceHover }}
             >
-              <Text className="text-white font-semibold">Show All Assets</Text>
+              <Text style={{ color: theme.text }} className="font-semibold">
+                Show All Assets
+              </Text>
             </Pressable>
           </Animated.View>
         )}
@@ -253,6 +278,7 @@ export default function HoldingsScreen() {
 function AssetCard({ asset, index }: { asset: Asset; index: number }) {
   const router = useRouter();
   const updateAsset = usePortfolioStore((s) => s.updateAsset);
+  const { theme } = useTheme();
 
   // Fetch live price data
   const priceData = usePriceDisplay(asset);
@@ -293,7 +319,8 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
     <Animated.View entering={FadeInDown.delay(400 + index * 50)}>
       <Pressable
         onPress={() => router.push(`/asset/${asset.id}`)}
-        className="bg-white/5 rounded-2xl p-4 mb-3"
+        className="rounded-2xl p-4 mb-3"
+        style={{ backgroundColor: theme.surface }}
       >
         <View className="flex-row items-center">
           <View
@@ -305,20 +332,28 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
 
           <View className="flex-1 ml-3">
             <View className="flex-row items-center">
-              <Text className="text-white font-semibold flex-1" numberOfLines={1}>
+              <Text style={{ color: theme.text }} className="font-semibold flex-1" numberOfLines={1}>
                 {asset.name}
               </Text>
               {/* Price Status Badge */}
               <StatusIndicator status={getStatus()} />
             </View>
             <View className="flex-row items-center mt-1">
-              {asset.ticker && <Text className="text-gray-400 text-sm mr-2">{asset.ticker}</Text>}
-              <Text className="text-gray-500 text-sm">{asset.platform || CATEGORY_INFO[asset.category].label}</Text>
+              {asset.ticker && (
+                <Text style={{ color: theme.textSecondary }} className="text-sm mr-2">
+                  {asset.ticker}
+                </Text>
+              )}
+              <Text style={{ color: theme.textTertiary }} className="text-sm">
+                {asset.platform || CATEGORY_INFO[asset.category].label}
+              </Text>
             </View>
           </View>
 
           <View className="items-end">
-            <Text className="text-white font-semibold">{formatCurrency(value)}</Text>
+            <Text style={{ color: theme.text }} className="font-semibold">
+              {formatCurrency(value)}
+            </Text>
             <View className="flex-row items-center mt-1">
               {isPositive ? (
                 <TrendingUp size={12} color="#10B981" />
@@ -331,25 +366,42 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
             </View>
           </View>
 
-          <ChevronRight size={16} color="#6B7280" style={{ marginLeft: 8 }} />
+          <ChevronRight size={16} color={theme.textTertiary} style={{ marginLeft: 8 }} />
         </View>
 
         {/* Additional Info Row */}
-        <View className="flex-row items-center mt-3 pt-3 border-t border-white/5">
+        <View
+          className="flex-row items-center mt-3 pt-3"
+          style={{ borderTopColor: theme.borderLight, borderTopWidth: 1 }}
+        >
           <View className="flex-1">
-            <Text className="text-gray-500 text-xs">Quantity</Text>
-            <Text className="text-gray-300 text-sm">{asset.quantity.toLocaleString()}</Text>
+            <Text style={{ color: theme.textTertiary }} className="text-xs">
+              Quantity
+            </Text>
+            <Text style={{ color: theme.textSecondary }} className="text-sm">
+              {asset.quantity.toLocaleString()}
+            </Text>
           </View>
           <View className="flex-1">
-            <Text className="text-gray-500 text-xs">Avg. Cost</Text>
-            <Text className="text-gray-300 text-sm">{formatCurrency(asset.purchasePrice)}</Text>
+            <Text style={{ color: theme.textTertiary }} className="text-xs">
+              Avg. Cost
+            </Text>
+            <Text style={{ color: theme.textSecondary }} className="text-sm">
+              {formatCurrency(asset.purchasePrice)}
+            </Text>
           </View>
           <View className="flex-1">
-            <Text className="text-gray-500 text-xs">Current</Text>
-            <Text className="text-gray-300 text-sm">{formatCurrency(currentPrice)}</Text>
+            <Text style={{ color: theme.textTertiary }} className="text-xs">
+              Current
+            </Text>
+            <Text style={{ color: theme.textSecondary }} className="text-sm">
+              {formatCurrency(currentPrice)}
+            </Text>
           </View>
           <View className="flex-1 items-end">
-            <Text className="text-gray-500 text-xs">P&L</Text>
+            <Text style={{ color: theme.textTertiary }} className="text-xs">
+              P&L
+            </Text>
             <Text className="text-sm" style={{ color: getGainColor(gain) }}>
               {formatCurrency(gain)}
             </Text>

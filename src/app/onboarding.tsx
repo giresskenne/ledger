@@ -81,6 +81,8 @@ import {
   JurisdictionCode,
   AssetCategory,
   CATEGORY_INFO,
+  CountryCode,
+  COUNTRY_INFO,
   POPULAR_BROKERS,
   RegisteredAccountType,
 } from '@/lib/types';
@@ -166,11 +168,11 @@ function FloatingOrb({
 }) {
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
-  const scale = useSharedValue(0.8);
-  const orbOpacity = useSharedValue(0);
+  const scale = useSharedValue(1);
+  // Default visible so the UI doesn't depend on Reanimated "entering" behavior.
+  const orbOpacity = useSharedValue(0.6);
 
   React.useEffect(() => {
-    orbOpacity.value = withDelay(delay, withTiming(0.6, { duration: 1000 }));
     translateY.value = withDelay(
       delay,
       withSequence(
@@ -237,9 +239,8 @@ function ScatteredVisual({ accentColor }: { accentColor: string }) {
   return (
     <View style={{ height: 320, position: 'relative' }}>
       {items.map((item, index) => (
-        <Animated.View
+        <View
           key={index}
-          entering={FadeIn.delay(item.delay).springify()}
           style={{
             position: 'absolute',
             left: item.x,
@@ -248,7 +249,7 @@ function ScatteredVisual({ accentColor }: { accentColor: string }) {
           }}
         >
           <item.IconComponent size={32} color={accentColor} />
-        </Animated.View>
+        </View>
       ))}
       <FloatingOrb delay={0} size={120} color={`${accentColor}15`} startX={20} startY={50} />
       <FloatingOrb delay={300} size={80} color={`${accentColor}10`} startX={SCREEN_WIDTH - 120} startY={200} />
@@ -267,8 +268,7 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
 
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View
-        entering={FadeIn.delay(200).springify()}
+      <View
         style={{
           width: SCREEN_WIDTH - 80,
           backgroundColor: 'rgba(255,255,255,0.05)',
@@ -288,9 +288,8 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
 
         <View style={{ height: 8, borderRadius: 4, flexDirection: 'row', overflow: 'hidden', marginTop: 20 }}>
           {categories.map((cat, i) => (
-            <Animated.View
+            <View
               key={cat.label}
-              entering={FadeIn.delay(400 + i * 100)}
               style={{
                 width: `${cat.percent}%`,
                 height: '100%',
@@ -316,7 +315,7 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
             </View>
           ))}
         </View>
-      </Animated.View>
+      </View>
       <FloatingOrb delay={0} size={100} color={`${accentColor}12`} startX={-20} startY={80} />
     </View>
   );
@@ -327,7 +326,7 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
 
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View entering={FadeIn.delay(200).springify()} style={{ alignItems: 'center' }}>
+      <View style={{ alignItems: 'center' }}>
         <View
           style={{
             width: 160,
@@ -359,9 +358,8 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
 
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 32 }}>
           {['Tech: 45%', 'US: 85%', 'Equity: 60%'].map((insight, i) => (
-            <Animated.View
+            <View
               key={insight}
-              entering={FadeIn.delay(500 + i * 150).springify()}
               style={{
                 paddingHorizontal: 16,
                 paddingVertical: 10,
@@ -374,10 +372,10 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
               <Text style={{ color: i === 0 ? '#EF4444' : '#9CA3AF', fontSize: 13, fontWeight: '500' }}>
                 {insight}
               </Text>
-            </Animated.View>
+            </View>
           ))}
         </View>
-      </Animated.View>
+      </View>
       <FloatingOrb delay={200} size={80} color={`${accentColor}15`} startX={SCREEN_WIDTH - 100} startY={40} />
     </View>
   );
@@ -393,7 +391,7 @@ function CTAVisual({ accentColor }: { accentColor: string }) {
 
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View entering={FadeIn.delay(200).springify()}>
+      <View>
         <View
           style={{
             width: 100,
@@ -407,13 +405,12 @@ function CTAVisual({ accentColor }: { accentColor: string }) {
         >
           <Zap size={48} color={accentColor} />
         </View>
-      </Animated.View>
+      </View>
 
       <View style={{ gap: 16 }}>
         {features.map((feature, i) => (
-          <Animated.View
+          <View
             key={feature.label}
-            entering={FadeIn.delay(400 + i * 100).springify()}
             style={{ flexDirection: 'row', alignItems: 'center' }}
           >
             <View
@@ -430,7 +427,7 @@ function CTAVisual({ accentColor }: { accentColor: string }) {
               <feature.icon size={16} color={accentColor} />
             </View>
             <Text style={{ color: 'white', fontSize: 16, fontWeight: '500' }}>{feature.label}</Text>
-          </Animated.View>
+          </View>
         ))}
       </View>
       <FloatingOrb delay={100} size={120} color={`${accentColor}10`} startX={SCREEN_WIDTH - 80} startY={0} />
@@ -719,12 +716,30 @@ const CURRENCIES: { value: Currency; label: string; symbol: string }[] = [
   { value: 'CHF', label: 'Swiss Franc', symbol: 'Fr' },
 ];
 
+const ASSET_COUNTRY_CODES = Object.keys(COUNTRY_INFO) as CountryCode[];
+
+function clampDayOfMonth(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(28, Math.floor(value)));
+}
+
+const WEEKDAYS: { key: number; label: string }[] = [
+  { key: 1, label: 'Mon' },
+  { key: 2, label: 'Tue' },
+  { key: 3, label: 'Wed' },
+  { key: 4, label: 'Thu' },
+  { key: 5, label: 'Fri' },
+  { key: 6, label: 'Sat' },
+  { key: 0, label: 'Sun' },
+];
+
 // First Asset Step - Matches add-asset.tsx exactly
 function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const insets = useSafeAreaInsets();
   const addAsset = usePortfolioStore((s) => s.addAsset);
   const markFirstAssetAdded = useOnboardingStore((s) => s.markFirstAssetAdded);
   const selectedCurrency = useOnboardingStore((s) => s.selectedCurrency);
+  const selectedCountry = useOnboardingStore((s) => s.selectedCountry);
 
   const [name, setName] = useState('');
   const [ticker, setTicker] = useState('');
@@ -740,9 +755,23 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   const [customPlatform, setCustomPlatform] = useState('');
   const [notes, setNotes] = useState('');
   const [address, setAddress] = useState('');
+  const [country, setCountry] = useState<CountryCode>(() => {
+    const fallback: CountryCode = 'US';
+    const code = (selectedCountry ?? fallback).toUpperCase();
+    return (code in COUNTRY_INFO ? (code as CountryCode) : fallback) as CountryCode;
+  });
+  const [customCountryName, setCustomCountryName] = useState('');
+
+  const [monthlyContributionEnabled, setMonthlyContributionEnabled] = useState(false);
+  const [monthlyContributionAmount, setMonthlyContributionAmount] = useState('');
+  const [monthlyContributionDay, setMonthlyContributionDay] = useState('1');
+  const [paycheckFrequency, setPaycheckFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('monthly');
+  const [paycheckWeekday, setPaycheckWeekday] = useState<number>(() => new Date().getDay());
+  const [monthlyContributionAutoApply, setMonthlyContributionAutoApply] = useState(true);
 
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showPurchaseDatePicker, setShowPurchaseDatePicker] = useState(false);
   const [showMaturityDatePicker, setShowMaturityDatePicker] = useState(false);
 
@@ -753,12 +782,49 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   const isFixedIncome = category === 'fixed_income' || category === 'bonds';
   const isRealEstate = category === 'real_estate';
   const canSearchTicker = category === 'stocks' || category === 'funds' || category === 'crypto';
+  const hideQuantity = category === 'cash' || category === 'real_estate';
+  const purchasePriceOptional = category === 'cash';
+
+  const namePlaceholder =
+    category === 'cash'
+      ? 'e.g., Checking account, Emergency fund'
+      : isRealEstate
+        ? 'e.g., Condo — Downtown, Rental property'
+        : 'e.g., Apple Inc., Gold Bar, etc.';
+
+  const purchasePriceLabel =
+    category === 'cash' ? 'Starting Balance (optional)' : 'Purchase Price *';
+
+  const currentPriceLabel =
+    category === 'cash'
+      ? 'Current Balance *'
+      : isRealEstate
+        ? 'Current Estimated Value *'
+        : 'Current Price *';
+
+  const currentPriceHint =
+    category === 'cash'
+      ? 'Update this occasionally to keep your cash total accurate.'
+      : 'For market-traded assets, prices update automatically. Manual assets require periodic updates.';
+
+  // Enforce "single" quantity for certain categories.
+  React.useEffect(() => {
+    if (!hideQuantity) return;
+    if (!quantity || Number(quantity) !== 1) setQuantity('1');
+  }, [hideQuantity, quantity]);
+
+  const resolvedQuantity = hideQuantity ? 1 : parseFloat(quantity);
+  const resolvedCurrentPrice = parseFloat(currentPrice);
+  const resolvedPurchasePrice = parseFloat(purchasePrice || (purchasePriceOptional ? currentPrice : ''));
 
   const canSubmit =
     name.trim() &&
-    parseFloat(quantity) > 0 &&
-    parseFloat(purchasePrice) > 0 &&
-    parseFloat(currentPrice) > 0;
+    Number.isFinite(resolvedQuantity) &&
+    resolvedQuantity > 0 &&
+    Number.isFinite(resolvedPurchasePrice) &&
+    resolvedPurchasePrice > 0 &&
+    Number.isFinite(resolvedCurrentPrice) &&
+    resolvedCurrentPrice > 0;
 
   // Search ticker and fetch live price
   const handleTickerSearch = async () => {
@@ -807,14 +873,33 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     const finalPlatform = platform === 'Other' ? customPlatform.trim() : platform.trim();
+    const parsedMonthlyAmount = parseFloat(monthlyContributionAmount);
+    const recurringContribution =
+      monthlyContributionEnabled && Number.isFinite(parsedMonthlyAmount) && parsedMonthlyAmount > 0
+        ? paycheckFrequency === 'monthly'
+          ? {
+              enabled: true,
+              frequency: 'monthly' as const,
+              dayOfMonth: clampDayOfMonth(parseInt(monthlyContributionDay || '1', 10)),
+              amount: parsedMonthlyAmount,
+              autoApply: monthlyContributionAutoApply,
+            }
+          : {
+              enabled: true,
+              frequency: paycheckFrequency,
+              weekday: paycheckWeekday,
+              amount: parsedMonthlyAmount,
+              autoApply: monthlyContributionAutoApply,
+            }
+        : undefined;
 
     addAsset({
       name: name.trim(),
       ticker: ticker.trim() || undefined,
       category,
-      quantity: parseFloat(quantity),
-      purchasePrice: parseFloat(purchasePrice),
-      currentPrice: parseFloat(currentPrice),
+      quantity: resolvedQuantity,
+      purchasePrice: resolvedPurchasePrice,
+      currentPrice: resolvedCurrentPrice,
       purchaseDate: purchaseDate.toISOString(),
       currency,
       maturityDate: maturityDate?.toISOString(),
@@ -822,7 +907,10 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
       platform: finalPlatform || undefined,
       notes: notes.trim() || undefined,
       address: address.trim() || undefined,
+      country,
+      countryName: country === 'OTHER' ? customCountryName.trim() || undefined : undefined,
       isManual: !canSearchTicker,
+      recurringContribution,
     });
 
     markFirstAssetAdded();
@@ -965,7 +1053,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="e.g., Apple Inc., Gold Bar, etc."
+              placeholder={namePlaceholder}
               placeholderTextColor="#6B7280"
               style={{
                 backgroundColor: 'rgba(255,255,255,0.1)',
@@ -978,32 +1066,31 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
           </Animated.View>
 
           {/* Ticker (optional) - with live data search */}
-          <Animated.View entering={FadeInDown.delay(250)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
-              Ticker Symbol {canSearchTicker && '(Search for live price)'}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TextInput
-                value={ticker}
-                onChangeText={(text) => {
-                  setTicker(text.toUpperCase());
-                  setTickerSearchError(null);
-                }}
-                placeholder={canSearchTicker ? "e.g., AAPL, VOO, BTC" : "Not applicable"}
-                placeholderTextColor="#6B7280"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: 12,
-                  padding: 16,
-                  color: 'white',
-                  fontSize: 16,
-                  flex: 1,
-                }}
-                autoCapitalize="characters"
-                editable={canSearchTicker}
-                onSubmitEditing={handleTickerSearch}
-              />
-              {canSearchTicker && (
+          {canSearchTicker && (
+            <Animated.View entering={FadeInDown.delay(250)} style={{ marginTop: 24 }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
+                Ticker Symbol (Search for live price)
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  value={ticker}
+                  onChangeText={(text) => {
+                    setTicker(text.toUpperCase());
+                    setTickerSearchError(null);
+                  }}
+                  placeholder="e.g., AAPL, VOO, BTC"
+                  placeholderTextColor="#6B7280"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: 12,
+                    padding: 16,
+                    color: 'white',
+                    fontSize: 16,
+                    flex: 1,
+                  }}
+                  autoCapitalize="characters"
+                  onSubmitEditing={handleTickerSearch}
+                />
                 <Pressable
                   onPress={handleTickerSearch}
                   disabled={!ticker.trim() || isSearchingTicker}
@@ -1022,39 +1109,41 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                     <Search size={20} color="white" />
                   )}
                 </Pressable>
+              </View>
+              {tickerSearchError && (
+                <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 8 }}>{tickerSearchError}</Text>
               )}
-            </View>
-            {tickerSearchError && (
-              <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 8 }}>{tickerSearchError}</Text>
-            )}
-            {canSearchTicker && !tickerSearchError && (
-              <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 8 }}>
-                Enter a ticker and tap search to fetch live price data
-              </Text>
-            )}
-          </Animated.View>
+              {!tickerSearchError && (
+                <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 8 }}>
+                  Enter a ticker and tap search to fetch live price data
+                </Text>
+              )}
+            </Animated.View>
+          )}
 
           {/* Quantity & Price Row */}
           <Animated.View entering={FadeInDown.delay(300)} style={{ marginTop: 24, flexDirection: 'row', gap: 16 }}>
+            {!hideQuantity && (
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Quantity *</Text>
+                <TextInput
+                  value={quantity}
+                  onChangeText={setQuantity}
+                  placeholder="0"
+                  placeholderTextColor="#6B7280"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: 12,
+                    padding: 16,
+                    color: 'white',
+                    fontSize: 16,
+                  }}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            )}
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Quantity *</Text>
-              <TextInput
-                value={quantity}
-                onChangeText={setQuantity}
-                placeholder="0"
-                placeholderTextColor="#6B7280"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: 12,
-                  padding: 16,
-                  color: 'white',
-                  fontSize: 16,
-                }}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Purchase Price *</Text>
+              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{purchasePriceLabel}</Text>
               <TextInput
                 value={purchasePrice}
                 onChangeText={setPurchasePrice}
@@ -1074,7 +1163,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
 
           {/* Current Price */}
           <Animated.View entering={FadeInDown.delay(350)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Current Price *</Text>
+            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{currentPriceLabel}</Text>
             <TextInput
               value={currentPrice}
               onChangeText={setCurrentPrice}
@@ -1090,7 +1179,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
               keyboardType="decimal-pad"
             />
             <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 8 }}>
-              For market-traded assets, prices update automatically. Manual assets require periodic updates.
+              {currentPriceHint}
             </Text>
           </Animated.View>
 
@@ -1139,6 +1228,88 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   </Pressable>
                 ))}
               </Animated.View>
+            )}
+          </Animated.View>
+
+          {/* Country / Region */}
+          <Animated.View entering={FadeInDown.delay(425)} style={{ marginTop: 24 }}>
+            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
+              {isRealEstate ? 'Property Country' : 'Country / Region'}
+            </Text>
+            <Pressable
+              onPress={() => setShowCountryPicker(!showCountryPicker)}
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderRadius: 12,
+                padding: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Text style={{ color: 'white', fontSize: 16 }}>
+                {COUNTRY_INFO[country]?.flag}{' '}
+                {country === 'OTHER' ? (customCountryName || 'Other') : COUNTRY_INFO[country]?.name} ({country})
+              </Text>
+              <ChevronDown size={20} color="#9CA3AF" />
+            </Pressable>
+
+            {showCountryPicker && (
+              <Animated.View
+                entering={FadeIn}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  borderRadius: 12,
+                  marginTop: 8,
+                  overflow: 'hidden',
+                }}
+              >
+                {ASSET_COUNTRY_CODES.map((code) => (
+                  <Pressable
+                    key={code}
+                    onPress={() => {
+                      setCountry(code);
+                      if (code !== 'OTHER') setCustomCountryName('');
+                      setShowCountryPicker(false);
+                      Haptics.selectionAsync();
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 16,
+                      borderBottomWidth: 1,
+                      borderBottomColor: 'rgba(255,255,255,0.05)',
+                      backgroundColor: country === code ? 'rgba(99,102,241,0.2)' : 'transparent',
+                    }}
+                  >
+                    <Text style={{ color: '#9CA3AF', width: 40, fontSize: 16 }}>
+                      {COUNTRY_INFO[code].flag}
+                    </Text>
+                    <Text style={{ color: 'white', flex: 1, fontSize: 16 }}>
+                      {COUNTRY_INFO[code].name}
+                    </Text>
+                    {country === code && <Check size={16} color="#6366F1" />}
+                  </Pressable>
+                ))}
+              </Animated.View>
+            )}
+
+            {country === 'OTHER' && (
+              <View style={{ marginTop: 12 }}>
+                <TextInput
+                  value={customCountryName}
+                  onChangeText={setCustomCountryName}
+                  placeholder="Enter country name"
+                  placeholderTextColor="#6B7280"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderRadius: 12,
+                    padding: 16,
+                    color: 'white',
+                    fontSize: 16,
+                  }}
+                />
+              </View>
             )}
           </Animated.View>
 
@@ -1295,6 +1466,185 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
               textAlignVertical="top"
             />
           </Animated.View>
+
+          {/* Monthly contribution */}
+          {(category === 'stocks' ||
+            category === 'funds' ||
+            category === 'crypto' ||
+            category === 'bonds' ||
+            category === 'fixed_income' ||
+            category === 'gold' ||
+            category === 'physical_metals' ||
+            category === 'cash') && (
+            <Animated.View entering={FadeInDown.delay(675)} style={{ marginTop: 24 }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
+                Paycheck Contribution (optional)
+              </Text>
+              <View
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  borderRadius: 14,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
+                      Enable recurring contribution
+                    </Text>
+                    <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6 }}>
+                      Get a reminder and keep your position updated over time.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={monthlyContributionEnabled}
+                    onValueChange={(v) => setMonthlyContributionEnabled(v)}
+                    trackColor={{ false: '#374151', true: '#6366F1' }}
+                    thumbColor="white"
+                  />
+                </View>
+
+                {monthlyContributionEnabled && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>Paycheck frequency</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                      {(['weekly', 'biweekly', 'monthly'] as const).map((f) => (
+                        <Pressable
+                          key={f}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setPaycheckFrequency(f);
+                          }}
+                          style={{
+                            flex: 1,
+                            borderRadius: 12,
+                            paddingVertical: 10,
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor:
+                              paycheckFrequency === f ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.12)',
+                            backgroundColor:
+                              paycheckFrequency === f ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.05)',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: paycheckFrequency === f ? '#C7D2FE' : '#D1D5DB',
+                              fontSize: 12,
+                              fontWeight: '700',
+                            }}
+                          >
+                            {f === 'weekly' ? 'Weekly' : f === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Amount</Text>
+                        <TextInput
+                          value={monthlyContributionAmount}
+                          onChangeText={setMonthlyContributionAmount}
+                          placeholder="0.00"
+                          placeholderTextColor="#6B7280"
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.1)',
+                            borderRadius: 12,
+                            padding: 14,
+                            color: 'white',
+                            fontSize: 16,
+                          }}
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                      {paycheckFrequency === 'monthly' ? (
+                        <View style={{ width: 120 }}>
+                          <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Day (1–28)</Text>
+                          <TextInput
+                            value={monthlyContributionDay}
+                            onChangeText={setMonthlyContributionDay}
+                            placeholder="1"
+                            placeholderTextColor="#6B7280"
+                            style={{
+                              backgroundColor: 'rgba(255,255,255,0.1)',
+                              borderRadius: 12,
+                              padding: 14,
+                              color: 'white',
+                              fontSize: 16,
+                            }}
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                      ) : (
+                        <View style={{ width: 160 }}>
+                          <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Weekday</Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                            {WEEKDAYS.map((d) => (
+                              <Pressable
+                                key={d.key}
+                                onPress={() => {
+                                  Haptics.selectionAsync();
+                                  setPaycheckWeekday(d.key);
+                                }}
+                                style={{
+                                  borderRadius: 10,
+                                  paddingVertical: 8,
+                                  paddingHorizontal: 10,
+                                  borderWidth: 1,
+                                  borderColor:
+                                    paycheckWeekday === d.key
+                                      ? 'rgba(99,102,241,0.5)'
+                                      : 'rgba(255,255,255,0.12)',
+                                  backgroundColor:
+                                    paycheckWeekday === d.key
+                                      ? 'rgba(99,102,241,0.18)'
+                                      : 'rgba(255,255,255,0.05)',
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: paycheckWeekday === d.key ? '#C7D2FE' : '#D1D5DB',
+                                    fontSize: 11,
+                                    fontWeight: '700',
+                                  }}
+                                >
+                                  {d.label}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                      <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
+                          Auto-apply updates
+                        </Text>
+                        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6 }}>
+                          When due, Ledger will update your position and ask you to validate it.
+                        </Text>
+                      </View>
+                      <Switch
+                        value={monthlyContributionAutoApply}
+                        onValueChange={(v) => setMonthlyContributionAutoApply(v)}
+                        trackColor={{ false: '#374151', true: '#6366F1' }}
+                        thumbColor="white"
+                      />
+                    </View>
+
+                    <Text style={{ color: '#6B7280', fontSize: 11, marginTop: 12 }}>
+                      You can confirm each contribution from the Events screen.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Animated.View>
+          )}
 
           {/* Submit Button */}
           <Animated.View entering={FadeInDown.delay(700)} style={{ marginTop: 32 }}>
@@ -2173,30 +2523,25 @@ export default function OnboardingScreen() {
         </View>
 
         {/* Content */}
-        <Animated.View
-          key={currentSlide.id}
-          entering={SlideInRight.springify().damping(18)}
-          exiting={SlideOutLeft.springify().damping(18)}
-          style={styles.content}
-        >
+        <View key={currentSlide.id} style={styles.content}>
           <View style={styles.visualContainer}>
             <SlideVisual visualType={currentSlide.visualType} accentColor={currentSlide.accentColor} />
           </View>
 
           <View style={styles.textContainer}>
-            <Animated.Text entering={FadeIn.delay(100)} style={[styles.headline, { color: 'white' }]}>
+            <Text style={[styles.headline, { color: 'white' }]}>
               {currentSlide.headline}
-            </Animated.Text>
+            </Text>
 
-            <Animated.Text entering={FadeIn.delay(200)} style={styles.subheadline}>
+            <Text style={styles.subheadline}>
               {currentSlide.subheadline}
-            </Animated.Text>
+            </Text>
 
-            <Animated.Text entering={FadeIn.delay(300)} style={styles.description}>
+            <Text style={styles.description}>
               {currentSlide.description}
-            </Animated.Text>
+            </Text>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Bottom actions */}
         <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 20 }]}>

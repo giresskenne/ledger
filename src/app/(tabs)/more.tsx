@@ -18,42 +18,20 @@ import {
   CreditCard,
   Bell,
 } from 'lucide-react-native';
-import { usePortfolioStore } from '@/lib/store';
 import { useEntitlementStatus } from '@/lib/premium-store';
-import { useRoomStore } from '@/lib/room-store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
+import { useNotificationsStore } from '@/lib/notifications-store';
 import { cn } from '@/lib/cn';
-
-// Generate upcoming event count
-function useUpcomingEventCount() {
-  const assets = usePortfolioStore((s) => s.assets);
-
-  return React.useMemo(() => {
-    const now = new Date();
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-
-    let count = 0;
-
-    assets.forEach((asset) => {
-      if (asset.maturityDate) {
-        const maturityDate = new Date(asset.maturityDate);
-        if (maturityDate >= now && maturityDate <= weekFromNow) {
-          count++;
-        }
-      }
-    });
-
-    count += 2; // Mock events
-    return count;
-  }, [assets]);
-}
+import { useSyncGeneratedEvents } from '@/lib/events';
+import { useTheme } from '@/lib/theme-store';
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isPremium, isDebugOverride } = useEntitlementStatus();
-  const upcomingEventCount = useUpcomingEventCount();
+  const { theme } = useTheme();
+  useSyncGeneratedEvents();
+  const unreadEventsCount = useNotificationsStore((s) => s.getUnreadCount());
   const registeredAccountsEnabled = useOnboardingStore((s) => s.registeredAccountsEnabled);
 
   const handlePress = (route: string) => {
@@ -62,9 +40,9 @@ export default function MoreScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <LinearGradient
-        colors={['#1a1a2e', '#0A0A0F']}
+        colors={[theme.headerGradientStart, theme.headerGradientEnd]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300 }}
       />
 
@@ -74,17 +52,27 @@ export default function MoreScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ paddingTop: insets.top }} className="px-5">
-          <Text className="text-white text-2xl font-bold">More</Text>
+          <Text style={{ color: theme.text }} className="text-2xl font-bold">
+            More
+          </Text>
 
           {/* Profile Card */}
-          <Animated.View entering={FadeInDown.delay(100)} className="mt-6 bg-white/5 rounded-2xl p-4">
+          <Animated.View
+            entering={FadeInDown.delay(100)}
+            className="mt-6 rounded-2xl p-4"
+            style={{ backgroundColor: theme.surface }}
+          >
             <View className="flex-row items-center">
               <View className="w-16 h-16 rounded-full bg-indigo-600 items-center justify-center">
                 <User size={28} color="white" />
               </View>
               <View className="flex-1 ml-4">
-                <Text className="text-white text-lg font-semibold">Investor</Text>
-                <Text className="text-gray-400 text-sm">investor@email.com</Text>
+                <Text style={{ color: theme.text }} className="text-lg font-semibold">
+                  Investor
+                </Text>
+                <Text style={{ color: theme.textSecondary }} className="text-sm">
+                  investor@email.com
+                </Text>
               </View>
               {isPremium && (
                 <View className={cn(
@@ -132,38 +120,60 @@ export default function MoreScreen() {
           )}
 
           {/* Features Section */}
-          <Text className="text-gray-400 text-sm mt-8 mb-3 px-1">FEATURES</Text>
-          <Animated.View entering={FadeInDown.delay(200)} className="bg-white/5 rounded-2xl overflow-hidden">
+          <Text style={{ color: theme.textSecondary }} className="text-sm mt-8 mb-3 px-1">
+            FEATURES
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(200)}
+            className="rounded-2xl overflow-hidden"
+            style={{ backgroundColor: theme.surface }}
+          >
             {/* Events */}
             <Pressable
-              onPress={() => handlePress('/(tabs)/events')}
-              className="flex-row items-center p-4 border-b border-white/5"
+              onPress={() =>
+                router.push({
+                  pathname: '/events',
+                  params: { returnTo: '/more' },
+                } as any)
+              }
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
             >
               <View className="w-9 h-9 rounded-full bg-rose-500/20 items-center justify-center">
                 <CalendarClock size={20} color="#F43F5E" />
               </View>
-              <Text className="text-white flex-1 ml-3">Events & Calendar</Text>
-              {upcomingEventCount > 0 && (
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Events & Calendar
+              </Text>
+              {unreadEventsCount > 0 && (
                 <View className="bg-rose-500 rounded-full px-2 py-0.5 mr-2">
                   <Text className="text-white text-xs font-semibold">
-                    {upcomingEventCount > 9 ? '9+' : upcomingEventCount}
+                    {unreadEventsCount > 9 ? '9+' : unreadEventsCount}
                   </Text>
                 </View>
               )}
-              <ChevronRight size={18} color="#6B7280" />
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
 
             {/* Rooms - Only show if registered accounts are enabled */}
             {registeredAccountsEnabled && (
               <Pressable
-                onPress={() => handlePress('/(tabs)/rooms')}
-                className="flex-row items-center p-4 border-b border-white/5"
+                onPress={() =>
+                  router.push({
+                    pathname: '/rooms',
+                    params: { returnTo: '/more' },
+                  } as any)
+                }
+                className="flex-row items-center p-4 border-b"
+                style={{ borderBottomColor: theme.borderLight }}
               >
                 <View className="w-9 h-9 rounded-full bg-emerald-500/20 items-center justify-center">
                   <Shield size={20} color="#10B981" />
                 </View>
-                <Text className="text-white flex-1 ml-3">Contribution Room</Text>
-                <ChevronRight size={18} color="#6B7280" />
+                <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                  Contribution Room
+                </Text>
+                <ChevronRight size={18} color={theme.textTertiary} />
               </Pressable>
             )}
 
@@ -175,39 +185,53 @@ export default function MoreScreen() {
               <View className="w-9 h-9 rounded-full bg-indigo-500/20 items-center justify-center">
                 <Bell size={20} color="#6366F1" />
               </View>
-              <Text className="text-white flex-1 ml-3">Notifications</Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Notifications
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
           </Animated.View>
 
           {/* Account Section */}
-          <Text className="text-gray-400 text-sm mt-8 mb-3 px-1">ACCOUNT</Text>
-          <Animated.View entering={FadeInDown.delay(300)} className="bg-white/5 rounded-2xl overflow-hidden">
+          <Text style={{ color: theme.textSecondary }} className="text-sm mt-8 mb-3 px-1">
+            ACCOUNT
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(300)}
+            className="rounded-2xl overflow-hidden"
+            style={{ backgroundColor: theme.surface }}
+          >
             {/* Settings */}
             <Pressable
               onPress={() => handlePress('/(tabs)/settings')}
-              className="flex-row items-center p-4 border-b border-white/5"
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
             >
               <View className="w-9 h-9 rounded-full bg-gray-500/20 items-center justify-center">
                 <Settings size={20} color="#9CA3AF" />
               </View>
-              <Text className="text-white flex-1 ml-3">Settings</Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Settings
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
 
             {/* Subscription */}
             <Pressable
               onPress={() => handlePress('/premium')}
-              className="flex-row items-center p-4 border-b border-white/5"
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
             >
               <View className="w-9 h-9 rounded-full bg-amber-500/20 items-center justify-center">
                 <CreditCard size={20} color="#F59E0B" />
               </View>
-              <Text className="text-white flex-1 ml-3">Subscription</Text>
-              <Text className="text-gray-400 text-sm mr-2">
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Subscription
+              </Text>
+              <Text style={{ color: theme.textSecondary }} className="text-sm mr-2">
                 {isPremium ? 'Premium' : 'Free'}
               </Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
 
             {/* Privacy */}
@@ -218,24 +242,35 @@ export default function MoreScreen() {
               <View className="w-9 h-9 rounded-full bg-blue-500/20 items-center justify-center">
                 <Lock size={20} color="#3B82F6" />
               </View>
-              <Text className="text-white flex-1 ml-3">Privacy Policy</Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Privacy Policy
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
           </Animated.View>
 
           {/* Support Section */}
-          <Text className="text-gray-400 text-sm mt-8 mb-3 px-1">SUPPORT</Text>
-          <Animated.View entering={FadeInDown.delay(400)} className="bg-white/5 rounded-2xl overflow-hidden">
+          <Text style={{ color: theme.textSecondary }} className="text-sm mt-8 mb-3 px-1">
+            SUPPORT
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(400)}
+            className="rounded-2xl overflow-hidden"
+            style={{ backgroundColor: theme.surface }}
+          >
             {/* Help */}
             <Pressable
               onPress={() => handlePress('/help-center')}
-              className="flex-row items-center p-4 border-b border-white/5"
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
             >
               <View className="w-9 h-9 rounded-full bg-cyan-500/20 items-center justify-center">
                 <HelpCircle size={20} color="#06B6D4" />
               </View>
-              <Text className="text-white flex-1 ml-3">Help Center</Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Help Center
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
 
             {/* Terms */}
@@ -246,8 +281,10 @@ export default function MoreScreen() {
               <View className="w-9 h-9 rounded-full bg-violet-500/20 items-center justify-center">
                 <FileText size={20} color="#8B5CF6" />
               </View>
-              <Text className="text-white flex-1 ml-3">Terms of Service</Text>
-              <ChevronRight size={18} color="#6B7280" />
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Terms of Service
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
             </Pressable>
           </Animated.View>
 

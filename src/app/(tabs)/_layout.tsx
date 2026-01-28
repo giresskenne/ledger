@@ -3,22 +3,28 @@ import { View, Text } from 'react-native';
 import { Tabs } from 'expo-router';
 import { LayoutDashboard, Wallet, PieChart, MoreHorizontal } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useSyncGeneratedEvents } from '@/lib/events';
+import { useScheduleLocalNotifications } from '@/lib/local-notifications';
+import { useTheme } from '@/lib/theme-store';
 
 export default function TabLayout() {
+  useSyncGeneratedEvents();
+  useScheduleLocalNotifications();
+  const { theme, isDark } = useTheme();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0A0A0F',
-          borderTopColor: 'rgba(255,255,255,0.1)',
+          backgroundColor: theme.backgroundSecondary,
+          borderTopColor: theme.border,
           borderTopWidth: 1,
           height: 85,
           paddingTop: 10,
           paddingBottom: 25,
         },
-        tabBarActiveTintColor: '#6366F1',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textTertiary,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',

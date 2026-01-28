@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme as useDeviceColorScheme } from 'react-native';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type StatusBarStyle = 'light' | 'dark';
@@ -89,6 +90,7 @@ const THEME_STORAGE_KEY = 'app_theme_mode';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('dark');
   const [isLoaded, setIsLoaded] = useState(false);
+  const deviceScheme = useDeviceColorScheme();
 
   // Load saved theme on mount
   useEffect(() => {
@@ -118,7 +120,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   // For now, system defaults to dark. In a real app, you'd check the device preference
-  const isDark = mode === 'dark' || mode === 'system';
+  const isDark =
+    mode === 'dark' || (mode === 'system' && (deviceScheme === 'dark' || deviceScheme === null));
   const theme = isDark ? DARK_THEME : LIGHT_THEME;
 
   // Don't render until theme is loaded to prevent flash

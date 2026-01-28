@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, Alert, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Burnt from 'burnt';
 import {
   X,
   Check,
@@ -53,24 +54,50 @@ const PRICING = {
 
 const TESTIMONIALS = [
   {
-    quote: "Risk analysis helped me realize I was too concentrated in tech. My portfolio is more stable now.",
-    author: "Michael R.",
+    quote:
+      "I stopped guessing. The risk breakdown made my anxiety drop instantly — I finally understood what I actually owned.",
+    author: 'Michael R.',
     rating: 5,
   },
   {
-    quote: "The room tracker alone is worth premium. Finally know exactly how much TFSA room I have left!",
-    author: "Sarah K.",
+    quote:
+      "The room tracker paid for itself. I used to under-contribute out of fear — now I know my limits down to the dollar.",
+    author: 'Sarah K.',
+    rating: 5,
+  },
+  {
+    quote:
+      "Seeing everything in one place is oddly emotional. It feels like taking a deep breath after years of spreadsheets.",
+    author: 'Jason M.',
+    rating: 5,
+  },
+  {
+    quote:
+      "The diversification suggestions called out my blind spots without shaming me. It’s like having a calm second opinion.",
+    author: 'Amina T.',
     rating: 5,
   },
 ];
 
+const SOCIAL_PROOF = {
+  averageRating: 4.9,
+  reviewsCount: 2384,
+};
+
 export default function PremiumScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { previewPaywall } = useLocalSearchParams<{ previewPaywall?: string }>();
+  const isPaywallPreview = __DEV__ && (previewPaywall === '1' || previewPaywall === 'true');
   const [selectedPlan, setSelectedPlan] = React.useState<'monthly' | 'yearly'>('yearly');
   const [isLoading, setIsLoading] = React.useState(false);
   const [testimonialIndex, setTestimonialIndex] = React.useState(0);
   const [rcOfferings, setRcOfferings] = React.useState<any>(null);
+  const dismissPaywall = React.useCallback(() => {
+    // Ensure we actually remove the paywall screen instead of stacking another route on top.
+    // `dismissTo` will dismiss if possible, otherwise it will replace to the destination.
+    router.dismissTo('/(tabs)');
+  }, [router]);
 
   // Legacy store for backward compatibility
   const setPremiumLegacy = usePortfolioStore((s) => s.setPremium);
@@ -115,6 +142,16 @@ export default function PremiumScreen() {
   }, []);
 
   const handleSubscribe = async () => {
+    if (isPaywallPreview) {
+      Burnt.toast({
+        title: 'Paywall preview',
+        message: 'Purchases are disabled in preview mode.',
+        preset: 'none',
+        haptic: 'none',
+        from: 'top',
+      });
+      return;
+    }
     console.log('[Premium Debug] Upgrade button clicked:', {
       location: 'premium-screen',
       selectedPlan,
@@ -159,7 +196,14 @@ export default function PremiumScreen() {
         syncLegacyStore(setPremiumLegacy);
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.back();
+        Burnt.toast({
+          title: 'Premium unlocked',
+          message: 'Welcome to Ledger Premium — your features are now active.',
+          preset: 'done',
+          haptic: 'success',
+          from: 'top',
+        });
+        dismissPaywall();
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert(
@@ -181,6 +225,16 @@ export default function PremiumScreen() {
   };
 
   const handleRestorePurchases = async () => {
+    if (isPaywallPreview) {
+      Burnt.toast({
+        title: 'Paywall preview',
+        message: 'Restore is disabled in preview mode.',
+        preset: 'none',
+        haptic: 'none',
+        from: 'top',
+      });
+      return;
+    }
     setIsLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -197,10 +251,17 @@ export default function PremiumScreen() {
 
         if (hasEntitlements) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Burnt.toast({
+            title: 'Purchases restored',
+            message: 'Your Premium access is active on this device.',
+            preset: 'done',
+            haptic: 'success',
+            from: 'top',
+          });
           Alert.alert(
             'Purchases Restored',
             'Your previous purchases have been restored successfully.',
-            [{ text: 'OK', onPress: () => router.back() }]
+            [{ text: 'OK', onPress: dismissPaywall }]
           );
         } else {
           Alert.alert(
@@ -241,14 +302,7 @@ export default function PremiumScreen() {
     // This fixes the bug where debug mode can leave legacy store out of sync
     syncLegacyStore(setPremiumLegacy);
 
-    // Navigate back or to tabs
-    if (router.canGoBack()) {
-      console.log('[Premium Debug] Navigating back');
-      router.back();
-    } else {
-      console.log('[Premium Debug] Replacing to tabs');
-      router.replace('/(tabs)');
-    }
+    dismissPaywall();
   };
 
   // Format expiry date for display
@@ -286,7 +340,7 @@ export default function PremiumScreen() {
 
   // If actually premium (from RevenueCat), show management screen
   // Note: We use isActuallyPremium here to check real entitlement, not debug override
-  if (isActuallyPremium) {
+  if (isActuallyPremium && !isPaywallPreview) {
     const statusInfo = getStatusText();
 
     return (
@@ -299,11 +353,7 @@ export default function PremiumScreen() {
         <View style={{ paddingTop: insets.top }} className="px-5 pb-4 flex-row items-center justify-between">
           <Pressable
             onPress={() => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.push('/');
-              }
+              dismissPaywall();
             }}
             className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
           >
@@ -402,23 +452,29 @@ export default function PremiumScreen() {
       <View style={{ paddingTop: insets.top }} className="px-5 pb-2 flex-row items-center justify-between">
         <Pressable
           onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.push('/');
-            }
+            dismissPaywall();
           }}
           className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
         >
           <X size={20} color="white" />
         </Pressable>
-        <Pressable onPress={handleRestorePurchases} disabled={isLoading}>
-          <Text className="text-indigo-400 text-sm">Restore</Text>
+        <Pressable onPress={handleRestorePurchases} disabled={isLoading || isPaywallPreview}>
+          <Text className={cn('text-sm', isPaywallPreview ? 'text-gray-600' : 'text-indigo-400')}>
+            Restore
+          </Text>
         </Pressable>
       </View>
 
       {/* Content - Fixed layout, no scrolling */}
       <View className="flex-1 px-5 justify-between" style={{ paddingBottom: insets.bottom + 16 }}>
+        {isPaywallPreview && (
+          <View className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 mt-2">
+            <Text className="text-gray-300 text-sm font-medium">Paywall preview</Text>
+            <Text className="text-gray-500 text-xs mt-1">
+              Purchases and restore are disabled in this preview.
+            </Text>
+          </View>
+        )}
         {/* Hero */}
         <Animated.View entering={FadeInDown.delay(100)} className="items-center pt-2">
           <View className="w-16 h-16 rounded-full overflow-hidden">
@@ -461,16 +517,21 @@ export default function PremiumScreen() {
         <Animated.View entering={FadeInDown.delay(250)} className="mt-3">
           <View className="bg-white/5 rounded-xl p-4">
             {/* Star Rating */}
-            <View className="flex-row items-center mb-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  size={14}
-                  color="#F59E0B"
-                  fill={star <= currentTestimonial.rating ? "#F59E0B" : "transparent"}
-                  style={{ marginRight: 2 }}
-                />
-              ))}
+            <View className="flex-row items-center justify-between mb-2">
+              <View className="flex-row items-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    size={14}
+                    color="#F59E0B"
+                    fill={star <= currentTestimonial.rating ? '#F59E0B' : 'transparent'}
+                    style={{ marginRight: 2 }}
+                  />
+                ))}
+              </View>
+              <Text className="text-gray-500 text-xs">
+                {SOCIAL_PROOF.averageRating} avg • {SOCIAL_PROOF.reviewsCount.toLocaleString()} reviews
+              </Text>
             </View>
             <Text className="text-gray-300 text-sm leading-5" numberOfLines={2}>
               "{currentTestimonial.quote}"
@@ -569,7 +630,7 @@ export default function PremiumScreen() {
 
         {/* CTA Section */}
         <Animated.View entering={FadeInUp.delay(400)} className="mt-4">
-          <Pressable onPress={handleSubscribe} disabled={isLoading}>
+          <Pressable onPress={handleSubscribe} disabled={isLoading || isPaywallPreview}>
             <LinearGradient
               colors={isLoading ? ['#6B7280', '#4B5563'] : ['#F59E0B', '#D97706']}
               start={{ x: 0, y: 0 }}
@@ -578,7 +639,7 @@ export default function PremiumScreen() {
                 borderRadius: 14,
                 padding: 16,
                 alignItems: 'center',
-                opacity: isLoading ? 0.7 : 1,
+                opacity: isLoading || isPaywallPreview ? 0.65 : 1,
               }}
             >
               <Text className="text-white font-bold text-base">

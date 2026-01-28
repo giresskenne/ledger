@@ -130,11 +130,25 @@ export interface Asset {
   // Sector and country for analytics
   sector?: Sector;
   country?: CountryCode;
+  countryName?: string; // used when country === 'OTHER'
   // For fixed income / bonds
   maturityDate?: string;
   interestRate?: number;
   // For real estate
   address?: string;
+  // Optional recurring monthly contributions (e.g., DCA / savings)
+  recurringContribution?: {
+    enabled: boolean;
+    frequency: PayFrequency;
+    // Monthly schedule: 1-28
+    dayOfMonth?: number;
+    // Weekly/Biweekly schedule: 0=Sun ... 6=Sat
+    weekday?: number;
+    amount: number;
+    autoApply: boolean;
+    lastAppliedId?: string; // monthly: YYYY-MM, else YYYY-MM-DD
+    lastValidatedId?: string; // monthly: YYYY-MM, else YYYY-MM-DD
+  };
   // For manual tracking
   isManual: boolean;
   lastUpdated: string;

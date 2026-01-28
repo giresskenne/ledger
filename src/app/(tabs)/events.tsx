@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -28,7 +28,6 @@ import {
   ExternalLink,
   ArrowLeft,
 } from 'lucide-react-native';
-import { usePortfolioStore } from '@/lib/store';
 import { useEntitlementStatus } from '@/lib/premium-store';
 import {
   useNotificationsStore,
@@ -36,87 +35,11 @@ import {
   EventType,
   EVENT_TYPE_INFO,
 } from '@/lib/notifications-store';
+import { usePortfolioStore } from '@/lib/store';
 import { cn } from '@/lib/cn';
-
-// Generate events from assets with maturity dates
-function generateMaturityEvents(assets: any[]): PortfolioEvent[] {
-  const events: PortfolioEvent[] = [];
-  const now = new Date();
-
-  assets.forEach((asset) => {
-    if (asset.maturityDate) {
-      const maturityDate = new Date(asset.maturityDate);
-      const daysUntil = Math.ceil(
-        (maturityDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (daysUntil > -30 && daysUntil < 365) {
-        events.push({
-          id: `maturity_${asset.id}`,
-          type: 'maturity',
-          title: `${asset.name} Matures`,
-          description:
-            daysUntil <= 0
-              ? 'Matured - action required'
-              : daysUntil === 1
-              ? 'Matures tomorrow'
-              : daysUntil <= 7
-              ? `Matures in ${daysUntil} days`
-              : `Matures on ${maturityDate.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })}`,
-          date: asset.maturityDate,
-          assetId: asset.id,
-          assetName: asset.name,
-          amount: asset.currentPrice * asset.quantity,
-          currency: asset.currency,
-          isRead: daysUntil > 30,
-          createdAt: now.toISOString(),
-        });
-      }
-    }
-  });
-
-  return events;
-}
-
-// Mock upcoming events for demo
-const MOCK_EVENTS: PortfolioEvent[] = [
-  {
-    id: 'div_1',
-    type: 'dividend',
-    title: 'AAPL Dividend',
-    description: 'Expected quarterly dividend payment',
-    date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    assetId: '1', // Links to Apple Inc. in mock data
-    assetName: 'Apple Inc.',
-    amount: 12.0,
-    currency: 'USD',
-    isRead: false,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'contrib_1',
-    type: 'contribution_reminder',
-    title: 'TFSA Contribution Due',
-    description: 'Monthly contribution to maximize room',
-    date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    amount: 583.33,
-    currency: 'USD',
-    isRead: false,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'rebal_1',
-    type: 'rebalance',
-    title: 'Portfolio Review',
-    description: 'Tech sector above target allocation',
-    date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    isRead: true,
-    createdAt: new Date().toISOString(),
-  },
-];
+import { useSyncGeneratedEvents } from '@/lib/events';
+import { formatCurrency } from '@/lib/formatters';
+import { useTheme } from '@/lib/theme-store';
 
 const EventIcon = ({ type }: { type: EventType }) => {
   const info = EVENT_TYPE_INFO[type];
@@ -147,6 +70,7 @@ function EventCard({
   index: number;
   onPress: () => void;
 }) {
+  const { theme, isDark } = useTheme();
   const info = EVENT_TYPE_INFO[event.type];
   const eventDate = new Date(event.date);
   const now = new Date();
@@ -188,9 +112,17 @@ function EventCard({
             'mx-5 mb-3 rounded-2xl overflow-hidden',
             isPast ? 'opacity-60' : ''
           )}
+          style={{
+            backgroundColor: theme.surface,
+            borderColor: theme.borderLight,
+            borderWidth: isDark ? 0 : 1,
+          }}
         >
-          {/* Glass background */}
-          <View className="absolute inset-0 bg-white/[0.04]" />
+          {/* Glass background (dark mode only) */}
+          <View
+            className="absolute inset-0"
+            style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}
+          />
 
           {/* Urgent indicator */}
           {isUrgent && (
@@ -221,10 +153,8 @@ function EventCard({
             <View className="flex-1 ml-3">
               <View className="flex-row items-center">
                 <Text
-                  className={cn(
-                    'font-semibold',
-                    event.isRead ? 'text-gray-300' : 'text-white'
-                  )}
+                  style={{ color: event.isRead ? theme.textSecondary : theme.text }}
+                  className="font-semibold"
                   numberOfLines={1}
                 >
                   {event.title}
@@ -233,7 +163,7 @@ function EventCard({
                   <View className="w-2 h-2 rounded-full bg-indigo-500 ml-2" />
                 )}
               </View>
-              <Text className="text-gray-500 text-sm mt-0.5" numberOfLines={1}>
+              <Text style={{ color: theme.textTertiary }} className="text-sm mt-0.5" numberOfLines={1}>
                 {event.description}
               </Text>
             </View>
@@ -241,17 +171,15 @@ function EventCard({
             {/* Right side */}
             <View className="items-end ml-3">
               {event.amount && (
-                <Text className="text-white font-medium">
-                  ${event.amount.toLocaleString()}
+                <Text style={{ color: theme.text }} className="font-medium">
+                  {formatCurrency(event.amount, event.currency ?? 'USD')}
                 </Text>
               )}
               <View className="flex-row items-center mt-1">
-                <Clock size={12} color="#6B7280" />
+                <Clock size={12} color={theme.textTertiary} />
                 <Text
-                  className={cn(
-                    'text-xs ml-1',
-                    isUrgent ? 'text-amber-500' : 'text-gray-500'
-                  )}
+                  style={{ color: isUrgent ? '#FBBF24' : theme.textTertiary }}
+                  className="text-xs ml-1"
                 >
                   {isPast
                     ? 'Past due'
@@ -264,7 +192,7 @@ function EventCard({
               </View>
             </View>
 
-            <ChevronRight size={18} color="#4B5563" className="ml-2" />
+            <ChevronRight size={18} color={theme.textTertiary} className="ml-2" />
           </View>
         </View>
       </Pressable>
@@ -281,10 +209,11 @@ function SectionHeader({
   count?: number;
   action?: { label: string; onPress: () => void };
 }) {
+  const { theme } = useTheme();
   return (
     <View className="flex-row items-center justify-between px-5 mb-3">
       <View className="flex-row items-center">
-        <Text className="text-gray-400 text-sm font-medium uppercase tracking-wide">
+        <Text style={{ color: theme.textSecondary }} className="text-sm font-medium uppercase tracking-wide">
           {title}
         </Text>
         {count !== undefined && count > 0 && (
@@ -303,20 +232,24 @@ function SectionHeader({
 }
 
 function EmptyState() {
+  const { theme } = useTheme();
   return (
     <Animated.View
       entering={FadeIn.delay(200)}
       className="items-center justify-center py-16 px-8"
     >
-      <View className="w-20 h-20 rounded-full bg-white/5 items-center justify-center mb-4">
-        <Calendar size={36} color="#6B7280" />
+      <View
+        className="w-20 h-20 rounded-full items-center justify-center mb-4"
+        style={{ backgroundColor: theme.surface }}
+      >
+        <Calendar size={36} color={theme.textTertiary} />
       </View>
-      <Text className="text-white text-lg font-semibold text-center">
+      <Text style={{ color: theme.text }} className="text-lg font-semibold text-center">
         No Upcoming Events
       </Text>
-      <Text className="text-gray-500 text-center mt-2 leading-5">
-        Events will appear here when you have assets with maturity dates,
-        expected dividends, or set price alerts.
+      <Text style={{ color: theme.textSecondary }} className="text-center mt-2 leading-5">
+        Events appear here when you have assets with maturity dates, contribution
+        room to stay on track with, or portfolio reviews to check in on.
       </Text>
     </Animated.View>
   );
@@ -335,14 +268,39 @@ function EventDetailModal({
   onViewAsset?: () => void;
 }) {
   if (!event) return null;
+  const { theme, isDark } = useTheme();
 
   const info = EVENT_TYPE_INFO[event.type];
+  const assets = usePortfolioStore((s) => s.assets);
+  const applyAssetContribution = usePortfolioStore((s) => s.applyAssetContribution);
+  const updateAsset = usePortfolioStore((s) => s.updateAsset);
+  const asset = React.useMemo(() => {
+    if (!event.assetId) return undefined;
+    return assets.find((a) => a.id === event.assetId);
+  }, [assets, event.assetId]);
+
   const eventDate = new Date(event.date);
   const now = new Date();
   const daysUntil = Math.ceil(
     (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   );
   const isPast = daysUntil < 0;
+
+  const isAssetContributionEvent =
+    typeof event.id === 'string' && event.id.startsWith('assetcontrib_') && !!event.assetId;
+
+  const contributionOccurrenceId = React.useMemo(() => {
+    if (!isAssetContributionEvent) return null;
+    const parts = event.id.split('_');
+    // assetcontrib_{assetId}_{frequency}_{occurrenceId}
+    return parts.length >= 4 ? parts.slice(3).join('_') : null;
+  }, [event.id, isAssetContributionEvent]);
+
+  const canMarkContributionDone =
+    isAssetContributionEvent &&
+    !!asset?.recurringContribution?.enabled &&
+    typeof contributionOccurrenceId === 'string' &&
+    contributionOccurrenceId.length > 0;
 
   const getTimeLabel = () => {
     if (isPast) return 'Past due';
@@ -358,6 +316,9 @@ function EventDetailModal({
   };
 
   const getActionText = () => {
+    if (isAssetContributionEvent) {
+      return 'Tap "Mark as done" after your contribution is made (or to validate the auto-added update).';
+    }
     switch (event.type) {
       case 'maturity':
         return 'Review your options for reinvesting or withdrawing these funds when the asset matures.';
@@ -374,6 +335,35 @@ function EventDetailModal({
     }
   };
 
+  const handleMarkContributionDone = () => {
+    if (!isAssetContributionEvent || !asset || !asset.recurringContribution || !contributionOccurrenceId) return;
+
+    const recurring = asset.recurringContribution;
+    const amount = Number(recurring.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    // If it hasn't been applied yet for that month, apply it now.
+    if (recurring.lastAppliedId !== contributionOccurrenceId) {
+      if (!Number.isFinite(asset.currentPrice) || asset.currentPrice <= 0) return;
+      applyAssetContribution({
+        assetId: asset.id,
+        amount,
+        date: new Date().toISOString(),
+      });
+    }
+
+    updateAsset(asset.id, {
+      recurringContribution: {
+        ...recurring,
+        lastAppliedId: contributionOccurrenceId,
+        lastValidatedId: contributionOccurrenceId,
+      },
+    });
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onClose();
+  };
+
   return (
     <Modal
       visible={visible}
@@ -387,7 +377,10 @@ function EventDetailModal({
       >
         <Pressable onPress={() => {}} className="w-full max-w-md">
           <Animated.View entering={FadeIn}>
-            <View className="bg-[#1a1a2e] rounded-3xl overflow-hidden">
+            <View
+              className="rounded-3xl overflow-hidden"
+              style={{ backgroundColor: theme.backgroundSecondary }}
+            >
               {/* Header gradient */}
               <LinearGradient
                 colors={[`${info.color}40`, 'transparent']}
@@ -403,9 +396,10 @@ function EventDetailModal({
               {/* Close button */}
               <Pressable
                 onPress={onClose}
-                className="absolute top-4 right-4 z-10 w-8 h-8 bg-black/30 rounded-full items-center justify-center"
+                className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full items-center justify-center"
+                style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.surfaceHover }}
               >
-                <X size={18} color="white" />
+                <X size={18} color={theme.text} />
               </Pressable>
 
               <View className="p-6 pt-8">
@@ -429,29 +423,31 @@ function EventDetailModal({
                       {info.label}
                     </Text>
                   </View>
-                  <Text className="text-white text-xl font-bold text-center">
+                  <Text style={{ color: theme.text }} className="text-xl font-bold text-center">
                     {event.title}
                   </Text>
                   {event.assetName && (
-                    <Text className="text-gray-400 text-sm mt-1">
+                    <Text style={{ color: theme.textSecondary }} className="text-sm mt-1">
                       {event.assetName}
                     </Text>
                   )}
                 </View>
 
                 {/* Details */}
-                <View className="mt-6 bg-white/5 rounded-2xl p-4">
+                <View className="mt-6 rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
                   {/* Date */}
                   <View className="flex-row items-center justify-between mb-3">
                     <View className="flex-row items-center">
-                      <Calendar size={16} color="#6B7280" />
-                      <Text className="text-gray-400 ml-2">Date</Text>
+                      <Calendar size={16} color={theme.textTertiary} />
+                      <Text style={{ color: theme.textSecondary }} className="ml-2">
+                        Date
+                      </Text>
                     </View>
                     <Text
-                      className={cn(
-                        'font-medium',
-                        isPast ? 'text-red-400' : daysUntil <= 7 ? 'text-amber-400' : 'text-white'
-                      )}
+                      style={{
+                        color: isPast ? '#F87171' : daysUntil <= 7 ? '#FBBF24' : theme.text,
+                      }}
+                      className="font-medium"
                     >
                       {getTimeLabel()}
                     </Text>
@@ -461,21 +457,23 @@ function EventDetailModal({
                   {event.amount && (
                     <View className="flex-row items-center justify-between mb-3">
                       <View className="flex-row items-center">
-                        <DollarSign size={16} color="#6B7280" />
-                        <Text className="text-gray-400 ml-2">Amount</Text>
+                        <DollarSign size={16} color={theme.textTertiary} />
+                        <Text style={{ color: theme.textSecondary }} className="ml-2">
+                          Amount
+                        </Text>
                       </View>
-                      <Text className="text-white font-medium">
-                        ${event.amount.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                      <Text style={{ color: theme.text }} className="font-medium">
+                        {formatCurrency(event.amount, event.currency ?? 'USD')}
                       </Text>
                     </View>
                   )}
 
                   {/* Description */}
-                  <View className="pt-3 border-t border-white/10">
-                    <Text className="text-gray-400 text-sm leading-5">
+                  <View
+                    className="pt-3"
+                    style={{ borderTopColor: theme.border, borderTopWidth: 1 }}
+                  >
+                    <Text style={{ color: theme.textSecondary }} className="text-sm leading-5">
                       {event.description}
                     </Text>
                   </View>
@@ -490,26 +488,55 @@ function EventDetailModal({
 
                 {/* Actions */}
                 <View className="mt-6 flex-row gap-3">
+                  {canMarkContributionDone && (
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        handleMarkContributionDone();
+                      }}
+                      className="flex-1 bg-indigo-500 rounded-xl py-3.5 flex-row items-center justify-center"
+                    >
+                      <Check size={18} color="white" />
+                      <Text className="text-white font-semibold ml-2">Mark as done</Text>
+                    </Pressable>
+                  )}
                   {event.assetId && onViewAsset && (
                     <Pressable
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         onViewAsset();
                       }}
-                      className="flex-1 bg-indigo-500 rounded-xl py-3.5 flex-row items-center justify-center"
+                      className="flex-1 rounded-xl py-3.5 flex-row items-center justify-center"
+                      style={{
+                        backgroundColor: canMarkContributionDone ? theme.surfaceHover : theme.primary,
+                      }}
                     >
-                      <ExternalLink size={18} color="white" />
-                      <Text className="text-white font-semibold ml-2">View Asset</Text>
+                      <ExternalLink size={18} color={canMarkContributionDone ? theme.text : 'white'} />
+                      <Text
+                        style={{ color: canMarkContributionDone ? theme.text : 'white' }}
+                        className="font-semibold ml-2"
+                      >
+                        View Asset
+                      </Text>
                     </Pressable>
                   )}
                   <Pressable
                     onPress={onClose}
                     className={cn(
                       'rounded-xl py-3.5 items-center justify-center',
-                      event.assetId ? 'flex-1 bg-white/10' : 'flex-1 bg-indigo-500'
+                      canMarkContributionDone ? 'px-4' : 'flex-1'
                     )}
+                    style={{
+                      backgroundColor:
+                        canMarkContributionDone || event.assetId ? theme.surfaceHover : theme.primary,
+                    }}
                   >
-                    <Text className="text-white font-semibold">
+                    <Text
+                      style={{
+                        color: canMarkContributionDone || event.assetId ? theme.text : 'white',
+                      }}
+                      className="font-semibold"
+                    >
                       {event.assetId ? 'Close' : 'Got it'}
                     </Text>
                   </Pressable>
@@ -526,28 +553,24 @@ function EventDetailModal({
 export default function EventsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useTheme();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<EventType | 'all'>('all');
   const [selectedEvent, setSelectedEvent] = React.useState<PortfolioEvent | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
 
-  const assets = usePortfolioStore((s) => s.assets);
+  const refreshGeneratedEvents = useSyncGeneratedEvents();
+  const events = useNotificationsStore((s) => s.events);
   const { isPremium } = useEntitlementStatus();
   const markEventAsRead = useNotificationsStore((s) => s.markEventAsRead);
   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead);
 
-  // Generate events from assets and combine with mock events
-  const maturityEvents = React.useMemo(
-    () => generateMaturityEvents(assets),
-    [assets]
-  );
-
   const allEvents = React.useMemo(() => {
-    const combined = [...maturityEvents, ...MOCK_EVENTS];
-    return combined.sort(
+    return [...events].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
-  }, [maturityEvents]);
+  }, [events]);
 
   const filteredEvents =
     filter === 'all'
@@ -573,8 +596,9 @@ export default function EventsScreen() {
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    refreshGeneratedEvents();
+    setTimeout(() => setRefreshing(false), 600);
+  }, [refreshGeneratedEvents]);
 
   const handleEventPress = (event: PortfolioEvent) => {
     markEventAsRead(event.id);
@@ -603,10 +627,10 @@ export default function EventsScreen() {
   ];
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Background gradient */}
       <LinearGradient
-        colors={['#1a1a2e', '#0A0A0F']}
+        colors={[theme.headerGradientStart, theme.headerGradientEnd]}
         style={{
           position: 'absolute',
           top: 0,
@@ -621,11 +645,17 @@ export default function EventsScreen() {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
+            if (typeof returnTo === 'string' && returnTo.length > 0) {
+              router.replace(returnTo as any);
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
           }}
           className="flex-row items-center gap-2"
         >
-          <ArrowLeft size={24} color="#6B7280" />
+          <ArrowLeft size={24} color={theme.textTertiary} />
         </Pressable>
       </View>
 
@@ -637,7 +667,7 @@ export default function EventsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#6366F1"
+            tintColor={theme.primary}
           />
         }
       >
@@ -645,8 +675,10 @@ export default function EventsScreen() {
         <View style={{ paddingTop: insets.top }} className="px-5 pb-4">
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-white text-2xl font-bold">Events</Text>
-              <Text className="text-gray-500 text-sm mt-1">
+              <Text style={{ color: theme.text }} className="text-2xl font-bold">
+                Events
+              </Text>
+              <Text style={{ color: theme.textTertiary }} className="text-sm mt-1">
                 {unreadCount > 0
                   ? `${unreadCount} new notification${unreadCount > 1 ? 's' : ''}`
                   : 'All caught up'}
@@ -659,7 +691,8 @@ export default function EventsScreen() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   markAllAsRead();
                 }}
-                className="bg-white/5 px-3 py-2 rounded-xl flex-row items-center"
+                className="px-3 py-2 rounded-xl flex-row items-center"
+                style={{ backgroundColor: theme.surface }}
               >
                 <Check size={16} color="#6366F1" />
                 <Text className="text-indigo-400 text-sm ml-1.5">Mark all</Text>
@@ -683,18 +716,14 @@ export default function EventsScreen() {
                   Haptics.selectionAsync();
                   setFilter(option.key);
                 }}
-                className={cn(
-                  'px-4 py-2 rounded-full mr-2',
-                  filter === option.key
-                    ? 'bg-indigo-500'
-                    : 'bg-white/5'
-                )}
+                className="px-4 py-2 rounded-full mr-2"
+                style={{
+                  backgroundColor: filter === option.key ? theme.primary : theme.surface,
+                }}
               >
                 <Text
-                  className={cn(
-                    'text-sm font-medium',
-                    filter === option.key ? 'text-white' : 'text-gray-400'
-                  )}
+                  style={{ color: filter === option.key ? 'white' : theme.textSecondary }}
+                  className="text-sm font-medium"
                 >
                   {option.label}
                 </Text>
@@ -718,14 +747,14 @@ export default function EventsScreen() {
                 borderColor: '#F59E0B30',
               }}
             >
-              <View className="flex-row items-center">
-                <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center">
-                  <AlertCircle size={24} color="#F59E0B" />
-                </View>
-                <View className="flex-1 ml-3">
-                  <Text className="text-white font-semibold">
+                <View className="flex-row items-center">
+                  <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center">
+                    <AlertCircle size={24} color="#F59E0B" />
+                  </View>
+                  <View className="flex-1 ml-3">
+                    <Text style={{ color: theme.text }} className="font-semibold">
                     {urgentEvents.length} Upcoming This Week
-                  </Text>
+                    </Text>
                   <Text className="text-amber-500/80 text-sm mt-0.5">
                     {urgentEvents.filter((e) => e.type === 'maturity').length > 0 &&
                       `${urgentEvents.filter((e) => e.type === 'maturity').length} maturity date${
@@ -815,10 +844,10 @@ export default function EventsScreen() {
                     <Sparkles size={24} color="#6366F1" />
                   </View>
                   <View className="flex-1 ml-3">
-                    <Text className="text-white font-semibold">
+                    <Text style={{ color: theme.text }} className="font-semibold">
                       Unlock Price Alerts
                     </Text>
-                    <Text className="text-gray-400 text-sm mt-0.5">
+                    <Text style={{ color: theme.textSecondary }} className="text-sm mt-0.5">
                       Get notified when assets hit your targets
                     </Text>
                   </View>

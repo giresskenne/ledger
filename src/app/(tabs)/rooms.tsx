@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, Pressable, Modal, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import {
@@ -42,6 +42,7 @@ const FREQUENCY_OPTIONS: { value: PayFrequency; label: string }[] = [
 export default function RoomTrackerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
 
   const { isPremium } = useEntitlementStatus();
 
@@ -269,7 +270,13 @@ export default function RoomTrackerScreen() {
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.back();
+            if (typeof returnTo === 'string' && returnTo.length > 0) {
+              router.replace(returnTo as any);
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
           }}
           className="flex-row items-center gap-2"
         >

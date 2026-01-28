@@ -42,3 +42,7 @@ yarn-error.*
 
 # Expo log
 expo.log
+
+# local logs
+console.log
+console_ledger.log

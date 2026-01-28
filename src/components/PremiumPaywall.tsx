@@ -7,10 +7,13 @@ import { Crown, Lock, X, Check, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { FREE_TIER_LIMITS } from '@/lib/premium-store';
 
+export type PaywallFeature = 'asset_limit' | 'analysis' | 'rooms' | 'price_alerts' | 'export';
+
 interface PremiumPaywallProps {
   visible: boolean;
   onClose: () => void;
-  feature?: 'asset_limit' | 'analysis' | 'rooms' | 'price_alerts' | 'export';
+  feature?: PaywallFeature;
+  viewOnly?: boolean;
 }
 
 const FEATURE_MESSAGES = {
@@ -50,7 +53,12 @@ const PREMIUM_BENEFITS = [
   'Data export',
 ];
 
-export function PremiumPaywall({ visible, onClose, feature = 'asset_limit' }: PremiumPaywallProps) {
+export function PremiumPaywall({
+  visible,
+  onClose,
+  feature = 'asset_limit',
+  viewOnly = false,
+}: PremiumPaywallProps) {
   const router = useRouter();
   const featureInfo = FEATURE_MESSAGES[feature];
   const IconComponent = featureInfo.icon;
@@ -60,10 +68,15 @@ export function PremiumPaywall({ visible, onClose, feature = 'asset_limit' }: Pr
       location: 'premium-paywall-modal',
       feature,
       featureTitle: featureInfo.title,
+      viewOnly,
       timestamp: new Date().toISOString(),
     });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onClose();
+    if (viewOnly) {
+      router.push('/premium?previewPaywall=1');
+      return;
+    }
     router.push('/premium');
   };
 
@@ -166,6 +179,11 @@ export function PremiumPaywall({ visible, onClose, feature = 'asset_limit' }: Pr
                 <Text className="text-gray-600 text-center text-xs mt-2">
                   Starting at $4.99/month • Cancel anytime
                 </Text>
+                {viewOnly && (
+                  <Text className="text-gray-500 text-center text-[11px] mt-2">
+                    Preview mode — purchases disabled (opens full paywall preview)
+                  </Text>
+                )}
               </View>
             </View>
           </Animated.View>

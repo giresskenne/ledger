@@ -19,15 +19,17 @@ import { usePortfolioStore } from '@/lib/store';
 import { useEntitlementStatus } from '@/lib/premium-store';
 import { CATEGORY_INFO, SECTOR_INFO, COUNTRY_INFO, Sector, CountryCode } from '@/lib/types';
 import { cn } from '@/lib/cn';
+import { useTheme } from '@/lib/theme-store';
 
 function LockedAnalysisScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <LinearGradient
-        colors={['#1a1a2e', '#0A0A0F']}
+        colors={[theme.headerGradientStart, theme.headerGradientEnd]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 500 }}
       />
 
@@ -52,10 +54,10 @@ function LockedAnalysisScreen() {
               </LinearGradient>
             </View>
 
-            <Text className="text-white text-2xl font-bold mt-8 text-center">
+            <Text style={{ color: theme.text }} className="text-2xl font-bold mt-8 text-center">
               Unlock Portfolio Analysis
             </Text>
-            <Text className="text-gray-400 text-center mt-3 px-8 leading-6">
+            <Text style={{ color: theme.textSecondary }} className="text-center mt-3 px-8 leading-6">
               Get AI-powered insights to optimize your portfolio, identify risks, and discover diversification opportunities.
             </Text>
           </View>
@@ -113,25 +115,34 @@ function LockedAnalysisScreen() {
               </LinearGradient>
             </Pressable>
 
-            <Text className="text-gray-500 text-center text-sm mt-4">
+            <Text style={{ color: theme.textTertiary }} className="text-center text-sm mt-4">
               Starting at $4.99/month
             </Text>
           </View>
 
           {/* Blurred Preview */}
           <View className="mt-10 opacity-40">
-            <Text className="text-white text-lg font-semibold mb-4 px-5">Preview</Text>
-            <View className="bg-white/5 rounded-2xl mx-5 p-4">
+            <Text style={{ color: theme.text }} className="text-lg font-semibold mb-4 px-5">
+              Preview
+            </Text>
+            <View className="rounded-2xl mx-5 p-4" style={{ backgroundColor: theme.surface }}>
               <View className="flex-row items-center">
                 <View className="w-16 h-16 rounded-full bg-amber-500/20 items-center justify-center">
                   <Text className="text-amber-500 text-2xl font-bold">7</Text>
                 </View>
                 <View className="ml-4 flex-1">
-                  <Text className="text-white font-semibold">Risk Score</Text>
-                  <Text className="text-gray-400 text-sm">Moderate-High Risk</Text>
+                  <Text style={{ color: theme.text }} className="font-semibold">
+                    Risk Score
+                  </Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-sm">
+                    Moderate-High Risk
+                  </Text>
                 </View>
               </View>
-              <View className="h-2 rounded-full bg-black/30 mt-4 overflow-hidden">
+              <View
+                className="h-2 rounded-full mt-4 overflow-hidden"
+                style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.borderLight }}
+              >
                 <View className="h-full w-[70%] bg-amber-500 rounded-full" />
               </View>
             </View>
@@ -145,6 +156,7 @@ function LockedAnalysisScreen() {
 function PremiumAnalysisScreen() {
   const insets = useSafeAreaInsets();
   const assets = usePortfolioStore((s) => s.assets);
+  const { theme, isDark } = useTheme();
 
   // Compute risk analysis with useMemo using real asset data
   const riskAnalysis = React.useMemo(() => {
@@ -260,9 +272,9 @@ function PremiumAnalysisScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <LinearGradient
-        colors={['#1a1a2e', '#0A0A0F']}
+        colors={[theme.headerGradientStart, theme.headerGradientEnd]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 400 }}
       />
 
@@ -273,7 +285,9 @@ function PremiumAnalysisScreen() {
       >
         <View style={{ paddingTop: insets.top }} className="px-5">
           <View className="flex-row items-center justify-between">
-            <Text className="text-white text-2xl font-bold">Analysis</Text>
+            <Text style={{ color: theme.text }} className="text-2xl font-bold">
+              Analysis
+            </Text>
             <View className="flex-row items-center bg-amber-500/20 px-3 py-1 rounded-full">
               <Sparkles size={14} color="#F59E0B" />
               <Text className="text-amber-500 text-sm font-medium ml-1">Premium</Text>
@@ -301,7 +315,9 @@ function PremiumAnalysisScreen() {
                   </Text>
                 </View>
                 <View className="ml-4 flex-1">
-                  <Text className="text-white text-xl font-semibold">Overall Risk Score</Text>
+                  <Text style={{ color: theme.text }} className="text-xl font-semibold">
+                    Overall Risk Score
+                  </Text>
                   <Text style={{ color: getRiskColor(riskAnalysis.overallRiskScore) }} className="mt-1">
                     {getRiskLabel(riskAnalysis.overallRiskScore)}
                   </Text>
@@ -310,7 +326,10 @@ function PremiumAnalysisScreen() {
 
               {/* Risk Meter */}
               <View className="mt-6">
-                <View className="h-3 rounded-full bg-black/30 overflow-hidden">
+                <View
+                  className="h-3 rounded-full overflow-hidden"
+                  style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.borderLight }}
+                >
                   <View
                     style={{
                       height: '100%',
@@ -321,9 +340,15 @@ function PremiumAnalysisScreen() {
                   />
                 </View>
                 <View className="flex-row justify-between mt-2">
-                  <Text className="text-gray-500 text-xs">Low</Text>
-                  <Text className="text-gray-500 text-xs">Moderate</Text>
-                  <Text className="text-gray-500 text-xs">High</Text>
+                  <Text style={{ color: theme.textTertiary }} className="text-xs">
+                    Low
+                  </Text>
+                  <Text style={{ color: theme.textTertiary }} className="text-xs">
+                    Moderate
+                  </Text>
+                  <Text style={{ color: theme.textTertiary }} className="text-xs">
+                    High
+                  </Text>
                 </View>
               </View>
             </LinearGradient>
@@ -333,10 +358,12 @@ function PremiumAnalysisScreen() {
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
               <TrendingUp size={20} color="#6366F1" />
-              <Text className="text-white text-lg font-semibold ml-2">Sector Exposure</Text>
+              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                Sector Exposure
+              </Text>
             </View>
 
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
               {riskAnalysis.sectorConcentration.map((sector, index) => (
                 <View
                   key={sector.name}
@@ -344,12 +371,15 @@ function PremiumAnalysisScreen() {
                 >
                   <View className="flex-1">
                     <View className="flex-row items-center">
-                      <Text className="text-white">{sector.name}</Text>
+                      <Text style={{ color: theme.text }}>{sector.name}</Text>
                       {sector.riskLevel === 'high' && (
                         <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
                       )}
                     </View>
-                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                    <View
+                      className="h-2 rounded-full mt-2 overflow-hidden"
+                      style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.borderLight }}
+                    >
                       <View
                         className="h-full rounded-full"
                         style={{
@@ -374,10 +404,12 @@ function PremiumAnalysisScreen() {
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
               <Globe size={20} color="#EC4899" />
-              <Text className="text-white text-lg font-semibold ml-2">Geographic Exposure</Text>
+              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                Geographic Exposure
+              </Text>
             </View>
 
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
               {riskAnalysis.geographicConcentration.map((region, index) => (
                 <View
                   key={region.name}
@@ -385,12 +417,15 @@ function PremiumAnalysisScreen() {
                 >
                   <View className="flex-1">
                     <View className="flex-row items-center">
-                      <Text className="text-white">{region.name}</Text>
+                      <Text style={{ color: theme.text }}>{region.name}</Text>
                       {region.riskLevel === 'high' && (
                         <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
                       )}
                     </View>
-                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                    <View
+                      className="h-2 rounded-full mt-2 overflow-hidden"
+                      style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.borderLight }}
+                    >
                       <View
                         className="h-full rounded-full"
                         style={{
@@ -415,10 +450,12 @@ function PremiumAnalysisScreen() {
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
               <PieChart size={20} color="#14B8A6" />
-              <Text className="text-white text-lg font-semibold ml-2">Asset Type Breakdown</Text>
+              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                Asset Type Breakdown
+              </Text>
             </View>
 
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
               {riskAnalysis.assetTypeConcentration.map((type, index) => (
                 <View
                   key={type.name}
@@ -426,12 +463,15 @@ function PremiumAnalysisScreen() {
                 >
                   <View className="flex-1">
                     <View className="flex-row items-center">
-                      <Text className="text-white">{type.name}</Text>
+                      <Text style={{ color: theme.text }}>{type.name}</Text>
                       {type.riskLevel === 'high' && (
                         <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
                       )}
                     </View>
-                    <View className="h-2 rounded-full bg-black/30 mt-2 overflow-hidden">
+                    <View
+                      className="h-2 rounded-full mt-2 overflow-hidden"
+                      style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : theme.borderLight }}
+                    >
                       <View
                         className="h-full rounded-full"
                         style={{
@@ -456,19 +496,24 @@ function PremiumAnalysisScreen() {
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
               <Lightbulb size={20} color="#F59E0B" />
-              <Text className="text-white text-lg font-semibold ml-2">Smart Suggestions</Text>
+              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                Smart Suggestions
+              </Text>
             </View>
 
             {riskAnalysis.suggestions.map((suggestion, index) => (
               <View
                 key={index}
-                className="bg-white/5 rounded-2xl p-4 mb-3"
+                className="rounded-2xl p-4 mb-3"
+                style={{ backgroundColor: theme.surface }}
               >
                 <View className="flex-row">
                   <View className="w-8 h-8 rounded-full bg-amber-500/20 items-center justify-center">
                     <Text className="text-amber-500 font-bold">{index + 1}</Text>
                   </View>
-                  <Text className="text-gray-300 flex-1 ml-3 leading-6">{suggestion}</Text>
+                  <Text style={{ color: theme.textSecondary }} className="flex-1 ml-3 leading-6">
+                    {suggestion}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -497,14 +542,24 @@ function FeaturePreview({
   title: string;
   description: string;
 }) {
+  const { theme } = useTheme();
   return (
-    <View className="flex-row items-center bg-white/5 rounded-2xl p-4 mx-5 mb-3">
-      <View className="w-12 h-12 rounded-full bg-white/10 items-center justify-center">{icon}</View>
-      <View className="flex-1 ml-4">
-        <Text className="text-white font-semibold">{title}</Text>
-        <Text className="text-gray-400 text-sm mt-1">{description}</Text>
+    <View className="flex-row items-center rounded-2xl p-4 mx-5 mb-3" style={{ backgroundColor: theme.surface }}>
+      <View
+        className="w-12 h-12 rounded-full items-center justify-center"
+        style={{ backgroundColor: theme.surfaceHover }}
+      >
+        {icon}
       </View>
-      <ChevronRight size={16} color="#6B7280" />
+      <View className="flex-1 ml-4">
+        <Text style={{ color: theme.text }} className="font-semibold">
+          {title}
+        </Text>
+        <Text style={{ color: theme.textSecondary }} className="text-sm mt-1">
+          {description}
+        </Text>
+      </View>
+      <ChevronRight size={16} color={theme.textTertiary} />
     </View>
   );
 }

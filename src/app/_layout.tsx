@@ -1,8 +1,8 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from '@/lib/useColorScheme';
+import { ThemeProvider as AppThemeProvider, useTheme } from '@/lib/theme-store';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -11,6 +11,19 @@ import { clearCache } from '@/lib/market-data';
 import { initializeSubscriptionSync } from '@/lib/revenuecatClient';
 import { usePremiumStore, syncLegacyStore } from '@/lib/premium-store';
 import { usePortfolioStore } from '@/lib/store';
+import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
+import { BiometricGate } from '@/components/BiometricGate';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -21,22 +34,12 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Custom dark theme for the app
-const FolioDarkTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: '#0A0A0F',
-    card: '#0A0A0F',
-    border: 'rgba(255,255,255,0.1)',
-    primary: '#6366F1',
-  },
-};
-
-function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null | undefined }) {
+function RootLayoutNav() {
   // Get store actions for syncing
   const syncFromCustomerInfo = usePremiumStore((s) => s.syncFromCustomerInfo);
   const setLegacyPremium = usePortfolioStore((s) => s.setPremium);
+  const router = useRouter();
+  const { isDark, theme } = useTheme();
 
   useEffect(() => {
     // Clear corrupted market data cache on startup (one-time fix)
@@ -69,110 +72,158 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
     };
   }, [syncFromCustomerInfo, setLegacyPremium]);
 
+  useEffect(() => {
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data as any;
+      if (!data) return;
+
+      if (data.ledger_local_notification) {
+        router.push({
+          pathname: '/events',
+          params: { returnTo: '/' },
+        } as any);
+      }
+    };
+
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+    // If the app was opened from a notification, handle it once on mount.
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) handleResponse(response);
+      })
+      .catch(() => {});
+
+    return () => {
+      sub.remove();
+    };
+  }, [router]);
+
+  const navigationTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+      background: theme.background,
+      card: theme.background,
+      border: theme.border,
+      primary: theme.primary,
+      text: theme.text,
+      notification: theme.accent,
+    },
+  };
+
   return (
-    <ThemeProvider value={FolioDarkTheme}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#0A0A0F' },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="onboarding"
-          options={{
+    <NavigationThemeProvider value={navigationTheme}>
+      <BiometricGate>
+        <Stack
+          screenOptions={{
             headerShown: false,
-            animation: 'fade',
-          }}
-        />
-        <Stack.Screen
-          name="add-asset"
-          options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
-          }}
-        />
-        <Stack.Screen
-          name="premium"
-          options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
-          }}
-        />
-        <Stack.Screen
-          name="asset/[id]"
-          options={{
+            contentStyle: { backgroundColor: theme.background },
             animation: 'slide_from_right',
           }}
-        />
-        <Stack.Screen
-          name="room-setup"
-          options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
-          }}
-        />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        <Stack.Screen
-          name="terms"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="privacy"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="disclaimer"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="currency-selector"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="appearance"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="export-data"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-        <Stack.Screen
-          name="help-center"
-          options={{
-            animation: 'slide_from_right',
-          }}
-        />
-      </Stack>
-    </ThemeProvider>
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="onboarding"
+            options={{
+              headerShown: false,
+              animation: 'fade',
+            }}
+          />
+          <Stack.Screen
+            name="add-asset"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen
+            name="premium"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen
+            name="asset/[id]"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="room-setup"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen
+            name="terms"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="privacy"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="disclaimer"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="currency-selector"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="appearance"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="export-data"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="help-center"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+        </Stack>
+      </BiometricGate>
+    </NavigationThemeProvider>
   );
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  return (
+    <AppThemeProvider>
+      <AppRoot />
+    </AppThemeProvider>
+  );
+}
 
+function AppRoot() {
+  const { theme } = useTheme();
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardProvider>
-          <StatusBar style="light" />
-          <RootLayoutNav colorScheme={colorScheme} />
+          <StatusBar style={theme.statusBarStyle} />
+          <RootLayoutNav />
         </KeyboardProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );
 }
-
