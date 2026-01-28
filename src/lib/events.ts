@@ -264,6 +264,68 @@ export function generateMaturityEvents(assets: Asset[]): GeneratedEvent[] {
   return events;
 }
 
+function getLastValuationDate(asset: Asset): Date {
+  const history = asset.valueHistory ?? [];
+  const latestHistory = history
+    .map((h) => new Date(h.date))
+    .filter((d) => !Number.isNaN(d.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+
+  if (latestHistory) return latestHistory;
+
+  const lastUpdated = new Date(asset.lastUpdated);
+  if (!Number.isNaN(lastUpdated.getTime())) return lastUpdated;
+
+  const purchaseDate = new Date(asset.purchaseDate);
+  if (!Number.isNaN(purchaseDate.getTime())) return purchaseDate;
+
+  return new Date();
+}
+
+export function generateStaleValuationEvents(params: {
+  assets: Asset[];
+  staleDays: number;
+}): GeneratedEvent[] {
+  const { assets, staleDays } = params;
+  const days = Math.max(1, Math.floor(staleDays));
+  const now = new Date();
+  const events: GeneratedEvent[] = [];
+
+  for (const asset of assets) {
+    if (!asset.isManual) continue;
+
+    const last = getLastValuationDate(asset);
+    const due = new Date(last);
+    due.setHours(9, 0, 0, 0);
+    due.setDate(due.getDate() + days);
+
+    const daysUntil = Math.ceil(
+      (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Keep the window similar to maturity: 30 days past due through 12 months ahead.
+    if (daysUntil < -30 || daysUntil > 365) continue;
+
+    events.push({
+      id: `stalevaluation_${asset.id}_${toISODateId(due)}`,
+      type: 'stale_valuation',
+      title: `Update ${asset.name}`,
+      description:
+        daysUntil <= 0
+          ? 'Value is stale — tap to update'
+          : daysUntil === 1
+            ? 'Value becomes stale tomorrow'
+            : `Value becomes stale in ${daysUntil} days`,
+      date: due.toISOString(),
+      assetId: asset.id,
+      assetName: asset.name,
+      currency: asset.currency,
+    });
+  }
+
+  return events;
+}
+
 export function generateContributionEvents(params: {
   enabledAccountTypes: RegisteredAccountType[];
   payFrequency: PayFrequency;
@@ -349,9 +411,17 @@ export function generateGeneratedEvents(params: {
   currency: Parameters<typeof formatCurrency>[1];
   taxYearId: string | null;
   riskSummary: { overallRiskScore: number; suggestions: string[] };
+  notificationPrefs: { staleValuationReminders: boolean; staleValuationDays: number };
 }): GeneratedEvent[] {
   const maturity = generateMaturityEvents(params.assets);
   const assetContrib = generateAssetContributionEvents(params.assets);
+  const staleValuation =
+    params.notificationPrefs.staleValuationReminders
+      ? generateStaleValuationEvents({
+          assets: params.assets,
+          staleDays: params.notificationPrefs.staleValuationDays,
+        })
+      : [];
 
   const contribution =
     params.taxYearId && params.enabledAccountTypes.length > 0
@@ -369,7 +439,7 @@ export function generateGeneratedEvents(params: {
     hasAssets: params.assets.length > 0,
   });
 
-  return [...maturity, ...assetContrib, ...contribution, ...rebalance];
+  return [...maturity, ...assetContrib, ...staleValuation, ...contribution, ...rebalance];
 }
 
 export function useSyncGeneratedEvents(): () => void {
@@ -392,6 +462,7 @@ export function useSyncGeneratedEvents(): () => void {
   const currency = useOnboardingStore((s) => s.selectedCurrency);
 
   const syncGeneratedEvents = useNotificationsStore((s) => s.syncGeneratedEvents);
+  const notificationPrefs = useNotificationsStore((s) => s.preferences);
 
   const taxYearId = React.useMemo(() => {
     if (!jurisdictionProfile) return null;
@@ -407,8 +478,12 @@ export function useSyncGeneratedEvents(): () => void {
       currency,
       taxYearId,
       riskSummary: { overallRiskScore: risk.overallRiskScore, suggestions: risk.suggestions },
+      notificationPrefs: {
+        staleValuationReminders: notificationPrefs.staleValuationReminders,
+        staleValuationDays: notificationPrefs.staleValuationDays,
+      },
     });
-  }, [assets, enabledAccountTypes, payFrequency, getSavingsTarget, currency, taxYearId, risk]);
+  }, [assets, enabledAccountTypes, payFrequency, getSavingsTarget, currency, taxYearId, risk, notificationPrefs.staleValuationDays, notificationPrefs.staleValuationReminders]);
 
   // Apply auto-recurring contributions when due (best-effort; runs while app is open).
   React.useEffect(() => {

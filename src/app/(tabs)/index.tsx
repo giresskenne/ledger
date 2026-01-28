@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { TrendingUp, TrendingDown, ChevronRight, Sparkles, Bell, Eye, EyeOff, AlertTriangle, Globe, PieChart, Shield, Calendar, PiggyBank, RefreshCw, DollarSign } from 'lucide-react-native';
+import { PolarChart, Pie } from 'victory-native';
 import * as Haptics from 'expo-haptics';
 import { usePortfolioStore } from '@/lib/store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
@@ -16,12 +17,14 @@ import { AssetLimitBanner, PremiumPaywall } from '@/components/PremiumPaywall';
 import { useNotificationsStore } from '@/lib/notifications-store';
 import { useSyncGeneratedEvents } from '@/lib/events';
 import { useTheme } from '@/lib/theme-store';
+import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const [hideBalance, setHideBalance] = React.useState(false);
+  const hidePerformanceMetrics = useUIPreferencesStore((s) => s.hidePerformanceMetrics);
   const [isReady, setIsReady] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   useSyncGeneratedEvents();
@@ -294,42 +297,44 @@ export default function DashboardScreen() {
                 {hideBalance ? '••••••' : formatCurrency(summary.totalValue)}
               </Text>
 
-              <View className="flex-row items-center mt-4 gap-4">
-                <View className="flex-row items-center">
-                  {isPositive ? (
-                    <TrendingUp size={16} color="#10B981" />
-                  ) : (
-                    <TrendingDown size={16} color="#EF4444" />
-                  )}
-                  <Text
-                    className="ml-1 font-semibold"
-                    style={{ color: getGainColor(summary.totalGain) }}
-                  >
-                    {hideBalance ? '••••' : formatCurrency(Math.abs(summary.totalGain))}
-                  </Text>
-                  <Text
-                    className="ml-1 text-sm"
-                    style={{ color: getGainColor(summary.totalGain) }}
-                  >
-                    ({formatPercent(summary.totalGainPercent)})
-                  </Text>
-                </View>
+              {!hidePerformanceMetrics && (
+                <View className="flex-row items-center mt-4 gap-4">
+                  <View className="flex-row items-center">
+                    {isPositive ? (
+                      <TrendingUp size={16} color="#10B981" />
+                    ) : (
+                      <TrendingDown size={16} color="#EF4444" />
+                    )}
+                    <Text
+                      className="ml-1 font-semibold"
+                      style={{ color: getGainColor(summary.totalGain) }}
+                    >
+                      {hideBalance ? '••••' : formatCurrency(Math.abs(summary.totalGain))}
+                    </Text>
+                    <Text
+                      className="ml-1 text-sm"
+                      style={{ color: getGainColor(summary.totalGain) }}
+                    >
+                      ({formatPercent(summary.totalGainPercent)})
+                    </Text>
+                  </View>
 
-                <View className="h-4 w-px" style={{ backgroundColor: theme.border }} />
+                  <View className="h-4 w-px" style={{ backgroundColor: theme.border }} />
 
-                <View className="flex-row items-center">
-                  <View
-                    className="w-2 h-2 rounded-full mr-2"
-                    style={{ backgroundColor: isDayPositive ? '#10B981' : '#EF4444' }}
-                  />
-                  <Text style={{ color: theme.textSecondary }} className="text-sm">
-                    Today:{' '}
-                  </Text>
-                  <Text style={{ color: getGainColor(summary.dayChange) }} className="text-sm font-medium">
-                    {formatPercent(summary.dayChangePercent)}
-                  </Text>
+                  <View className="flex-row items-center">
+                    <View
+                      className="w-2 h-2 rounded-full mr-2"
+                      style={{ backgroundColor: isDayPositive ? '#10B981' : '#EF4444' }}
+                    />
+                    <Text style={{ color: theme.textSecondary }} className="text-sm">
+                      Today:{' '}
+                    </Text>
+                    <Text style={{ color: getGainColor(summary.dayChange) }} className="text-sm font-medium">
+                      {formatPercent(summary.dayChangePercent)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              )}
 
               {/* Mini allocation bar */}
               <View
@@ -472,7 +477,17 @@ export default function DashboardScreen() {
 
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
             {countryAllocation.map((item, index) => (
-              <View key={item.code} className={cn('', index > 0 && 'mt-4')}>
+              <Pressable
+                key={item.code}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: '/(tabs)/holdings',
+                    params: { country: item.code },
+                  } as any);
+                }}
+                className={cn('', index > 0 && 'mt-4')}
+              >
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-row items-center">
                     <Text className="text-lg mr-2">{item.flag}</Text>
@@ -497,7 +512,7 @@ export default function DashboardScreen() {
                     }}
                   />
                 </View>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -519,12 +534,75 @@ export default function DashboardScreen() {
           </View>
 
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+            {/* Simple treemap-style mosaic (tap to drill down) */}
+            {sectorAllocation.length > 0 && (
+              <View className="mb-4">
+                <View className="flex-row overflow-hidden rounded-2xl" style={{ height: 110 }}>
+                  {[sectorAllocation[0], sectorAllocation[1], sectorAllocation[2]]
+                    .filter(Boolean)
+                    .map((item, idx, arr) => (
+                    <Pressable
+                      key={`mosaic-top-${item.code}`}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({
+                          pathname: '/(tabs)/holdings',
+                          params: { sector: item.code },
+                        } as any);
+                      }}
+                      style={{ flex: Math.max(1, item.percentage) }}
+                      className={cn('rounded-2xl overflow-hidden', idx < arr.length - 1 && 'mr-2')}
+                    >
+                      <View style={{ backgroundColor: item.color }} className="flex-1 p-3 justify-end">
+                        <Text className="text-white font-bold text-sm" numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text className="text-white/80 text-xs">{item.percentage.toFixed(0)}%</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+                <View className="flex-row overflow-hidden rounded-2xl mt-2" style={{ height: 80 }}>
+                  {[sectorAllocation[3], sectorAllocation[4], sectorAllocation[5]]
+                    .filter(Boolean)
+                    .map((item, idx, arr) => (
+                    <Pressable
+                      key={`mosaic-bottom-${item.code}`}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({
+                          pathname: '/(tabs)/holdings',
+                          params: { sector: item.code },
+                        } as any);
+                      }}
+                      style={{ flex: Math.max(1, item.percentage) }}
+                      className={cn('rounded-2xl overflow-hidden', idx < arr.length - 1 && 'mr-2')}
+                    >
+                      <View style={{ backgroundColor: item.color }} className="flex-1 p-3 justify-end">
+                        <Text className="text-white font-bold text-xs" numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text className="text-white/80 text-[10px]">{item.percentage.toFixed(0)}%</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {sectorAllocation.map((item, index) => (
-              <View key={item.code} className={cn('flex-row items-center', index > 0 && 'mt-4')}>
-                <View
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
+              <Pressable
+                key={item.code}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: '/(tabs)/holdings',
+                    params: { sector: item.code },
+                  } as any);
+                }}
+                className={cn('flex-row items-center', index > 0 && 'mt-4')}
+              >
+                <View className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                 <Text style={{ color: theme.text }} className="flex-1 ml-3">
                   {item.name}
                 </Text>
@@ -534,7 +612,7 @@ export default function DashboardScreen() {
                 <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
                   {item.percentage.toFixed(1)}%
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -551,10 +629,38 @@ export default function DashboardScreen() {
           </View>
 
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+            {allocation.length > 0 && (
+              <View className="items-center mb-4">
+                <View style={{ width: 180, height: 180 }}>
+                  <PolarChart
+                    data={allocation.slice(0, 8).map((a) => ({
+                      label: CATEGORY_INFO[a.category as keyof typeof CATEGORY_INFO]?.label ?? a.category,
+                      value: a.value,
+                      color: a.color,
+                    }))}
+                    labelKey="label"
+                    valueKey="value"
+                    colorKey="color"
+                  >
+                    <Pie.Chart innerRadius={60} size={180} />
+                  </PolarChart>
+                </View>
+                <Text style={{ color: theme.textTertiary }} className="text-xs mt-2">
+                  Tap a row below to filter holdings.
+                </Text>
+              </View>
+            )}
             {allocation.slice(0, 5).map((item, index) => (
-              <View
+              <Pressable
                 key={item.category}
                 className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: '/(tabs)/holdings',
+                    params: { category: item.category },
+                  } as any);
+                }}
               >
                 <View
                   className="w-3 h-3 rounded-full"
@@ -569,54 +675,56 @@ export default function DashboardScreen() {
                 <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
                   {item.percentage.toFixed(1)}%
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </View>
 
         {/* Top Performers */}
-        <View className="px-5 mt-8">
-          <Text style={{ color: theme.text }} className="text-lg font-semibold mb-4">
-            Top Performers
-          </Text>
+        {!hidePerformanceMetrics && (
+          <View className="px-5 mt-8">
+            <Text style={{ color: theme.text }} className="text-lg font-semibold mb-4">
+              Top Performers
+            </Text>
 
-          {topPerformers.map((asset, index) => (
-            <Pressable
-              key={asset.id}
-              onPress={() => router.push(`/asset/${asset.id}`)}
-              className={cn(
-                'rounded-2xl p-4 flex-row items-center',
-                index > 0 && 'mt-3'
-              )}
-              style={{ backgroundColor: theme.surface }}
-            >
-              <View
-                className="w-12 h-12 rounded-full items-center justify-center"
-                style={{ backgroundColor: CATEGORY_INFO[asset.category].color + '20' }}
+            {topPerformers.map((asset, index) => (
+              <Pressable
+                key={asset.id}
+                onPress={() => router.push(`/asset/${asset.id}`)}
+                className={cn(
+                  'rounded-2xl p-4 flex-row items-center',
+                  index > 0 && 'mt-3'
+                )}
+                style={{ backgroundColor: theme.surface }}
               >
-                <Text className="text-lg font-bold" style={{ color: CATEGORY_INFO[asset.category].color }}>
-                  {asset.ticker?.[0] || asset.name[0]}
-                </Text>
-              </View>
-              <View className="flex-1 ml-3">
-                <Text style={{ color: theme.text }} className="font-medium">
-                  {asset.name}
-                </Text>
-                <Text style={{ color: theme.textSecondary }} className="text-sm">
-                  {asset.ticker || CATEGORY_INFO[asset.category].label}
-                </Text>
-              </View>
-              <View className="items-end">
-                <Text style={{ color: theme.text }} className="font-medium">
-                  {hideBalance ? '••••' : formatCurrency(asset.currentPrice * asset.quantity)}
-                </Text>
-                <Text style={{ color: getGainColor(asset.gainPercent) }} className="text-sm">
-                  {formatPercent(asset.gainPercent)}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+                <View
+                  className="w-12 h-12 rounded-full items-center justify-center"
+                  style={{ backgroundColor: CATEGORY_INFO[asset.category].color + '20' }}
+                >
+                  <Text className="text-lg font-bold" style={{ color: CATEGORY_INFO[asset.category].color }}>
+                    {asset.ticker?.[0] || asset.name[0]}
+                  </Text>
+                </View>
+                <View className="flex-1 ml-3">
+                  <Text style={{ color: theme.text }} className="font-medium">
+                    {asset.name}
+                  </Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-sm">
+                    {asset.ticker || CATEGORY_INFO[asset.category].label}
+                  </Text>
+                </View>
+                <View className="items-end">
+                  <Text style={{ color: theme.text }} className="font-medium">
+                    {hideBalance ? '••••' : formatCurrency(asset.currentPrice * asset.quantity)}
+                  </Text>
+                  <Text style={{ color: getGainColor(asset.gainPercent) }} className="text-sm">
+                    {formatPercent(asset.gainPercent)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View className="px-5 mt-8">

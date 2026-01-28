@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, RefreshControl, Modal } from 'react-
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Calendar as RNCalendar } from 'react-native-calendars';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -54,6 +55,8 @@ const EventIcon = ({ type }: { type: EventType }) => {
       return <TrendingUp {...iconProps} />;
     case 'contribution_reminder':
       return <PiggyBank {...iconProps} />;
+    case 'stale_valuation':
+      return <RefreshCw {...iconProps} />;
     case 'rebalance':
       return <RefreshCw {...iconProps} />;
     default:
@@ -557,6 +560,8 @@ export default function EventsScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [refreshing, setRefreshing] = React.useState(false);
   const [filter, setFilter] = React.useState<EventType | 'all'>('all');
+  const [viewMode, setViewMode] = React.useState<'list' | 'calendar'>('list');
+  const [selectedDate, setSelectedDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [selectedEvent, setSelectedEvent] = React.useState<PortfolioEvent | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
 
@@ -623,8 +628,42 @@ export default function EventsScreen() {
     { key: 'maturity', label: 'Maturity' },
     { key: 'dividend', label: 'Dividends' },
     { key: 'contribution_reminder', label: 'Contributions' },
+    { key: 'stale_valuation', label: 'Stale Values' },
     { key: 'rebalance', label: 'Rebalance' },
   ];
+
+  const markedDates = React.useMemo(() => {
+    const marks: Record<string, any> = {};
+
+    for (const e of filteredEvents) {
+      const day = new Date(e.date).toISOString().slice(0, 10);
+      const dotColor = EVENT_TYPE_INFO[e.type]?.color ?? theme.primary;
+
+      const existing = marks[day];
+      const dots = existing?.dots ?? [];
+
+      if (!dots.some((d: any) => d.color === dotColor)) {
+        dots.push({ color: dotColor });
+      }
+
+      marks[day] = { ...(existing ?? {}), dots, marked: true };
+    }
+
+    marks[selectedDate] = {
+      ...(marks[selectedDate] ?? {}),
+      selected: true,
+      selectedColor: theme.primary,
+      selectedTextColor: '#FFFFFF',
+    };
+
+    return marks;
+  }, [filteredEvents, selectedDate, theme.primary]);
+
+  const eventsForSelectedDate = React.useMemo(() => {
+    return filteredEvents.filter(
+      (e) => new Date(e.date).toISOString().slice(0, 10) === selectedDate
+    );
+  }, [filteredEvents, selectedDate]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -699,6 +738,38 @@ export default function EventsScreen() {
               </Pressable>
             )}
           </View>
+
+          {/* View mode toggle */}
+          <View className="flex-row mt-4">
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setViewMode('list');
+              }}
+              className={cn(
+                'flex-1 py-2.5 rounded-xl items-center',
+                viewMode === 'list' ? 'bg-white/15' : 'bg-white/5'
+              )}
+            >
+              <Text className={cn('text-sm font-semibold', viewMode === 'list' ? 'text-white' : 'text-gray-400')}>
+                List
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setViewMode('calendar');
+              }}
+              className={cn(
+                'flex-1 py-2.5 rounded-xl items-center ml-3',
+                viewMode === 'calendar' ? 'bg-white/15' : 'bg-white/5'
+              )}
+            >
+              <Text className={cn('text-sm font-semibold', viewMode === 'calendar' ? 'text-white' : 'text-gray-400')}>
+                Calendar
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Filter chips */}
@@ -732,82 +803,126 @@ export default function EventsScreen() {
           </ScrollView>
         </Animated.View>
 
-        {/* Summary Card */}
-        {urgentEvents.length > 0 && (
-          <Animated.View
-            entering={FadeInDown.delay(150).springify()}
-            className="mx-5 mb-6"
-          >
-            <LinearGradient
-              colors={['#F59E0B15', '#F59E0B05']}
-              style={{
-                borderRadius: 20,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: '#F59E0B30',
-              }}
-            >
-                <View className="flex-row items-center">
-                  <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center">
-                    <AlertCircle size={24} color="#F59E0B" />
-                  </View>
-                  <View className="flex-1 ml-3">
-                    <Text style={{ color: theme.text }} className="font-semibold">
-                    {urgentEvents.length} Upcoming This Week
-                    </Text>
-                  <Text className="text-amber-500/80 text-sm mt-0.5">
-                    {urgentEvents.filter((e) => e.type === 'maturity').length > 0 &&
-                      `${urgentEvents.filter((e) => e.type === 'maturity').length} maturity date${
-                        urgentEvents.filter((e) => e.type === 'maturity').length > 1 ? 's' : ''
-                      }`}
-                    {urgentEvents.filter((e) => e.type === 'maturity').length > 0 &&
-                      urgentEvents.filter((e) => e.type !== 'maturity').length > 0 &&
-                      ', '}
-                    {urgentEvents.filter((e) => e.type !== 'maturity').length > 0 &&
-                      `${urgentEvents.filter((e) => e.type !== 'maturity').length} other event${
-                        urgentEvents.filter((e) => e.type !== 'maturity').length > 1 ? 's' : ''
-                      }`}
+        {viewMode === 'calendar' ? (
+          <View className="px-5 mb-6">
+            <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surface }}>
+              <RNCalendar
+                theme={{
+                  calendarBackground: theme.surface,
+                  dayTextColor: theme.text,
+                  monthTextColor: theme.text,
+                  selectedDayBackgroundColor: theme.primary,
+                  selectedDayTextColor: '#FFFFFF',
+                  todayTextColor: theme.primary,
+                  arrowColor: theme.textSecondary,
+                  textDisabledColor: theme.textTertiary,
+                }}
+                markingType="multi-dot"
+                markedDates={markedDates}
+                onDayPress={(day) => setSelectedDate(day.dateString)}
+              />
+            </View>
+
+            <View className="mt-6">
+              <SectionHeader title="Selected Day" count={eventsForSelectedDate.length} />
+              {eventsForSelectedDate.length === 0 ? (
+                <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+                  <Text style={{ color: theme.textSecondary }}>
+                    No events on {selectedDate}.
                   </Text>
                 </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        )}
-
-        {/* Events List */}
-        {filteredEvents.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            {/* This Week */}
-            {urgentEvents.length > 0 && (
-              <>
-                <SectionHeader title="This Week" count={urgentEvents.length} />
-                {urgentEvents.map((event, index) => (
+              ) : (
+                eventsForSelectedDate.map((event, index) => (
                   <EventCard
                     key={event.id}
                     event={event}
                     index={index}
                     onPress={() => handleEventPress(event)}
                   />
-                ))}
-              </>
+                ))
+              )}
+            </View>
+          </View>
+        ) : (
+          <>
+            {/* Summary Card */}
+            {urgentEvents.length > 0 && (
+              <Animated.View
+                entering={FadeInDown.delay(150).springify()}
+                className="mx-5 mb-6"
+              >
+                <LinearGradient
+                  colors={['#F59E0B15', '#F59E0B05']}
+                  style={{
+                    borderRadius: 20,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: '#F59E0B30',
+                  }}
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center">
+                      <AlertCircle size={24} color="#F59E0B" />
+                    </View>
+                    <View className="flex-1 ml-3">
+                      <Text style={{ color: theme.text }} className="font-semibold">
+                        {urgentEvents.length} Upcoming This Week
+                      </Text>
+                      <Text className="text-amber-500/80 text-sm mt-0.5">
+                        {urgentEvents.filter((e) => e.type === 'maturity').length > 0 &&
+                          `${urgentEvents.filter((e) => e.type === 'maturity').length} maturity date${
+                            urgentEvents.filter((e) => e.type === 'maturity').length > 1 ? 's' : ''
+                          }`}
+                        {urgentEvents.filter((e) => e.type === 'maturity').length > 0 &&
+                          urgentEvents.filter((e) => e.type !== 'maturity').length > 0 &&
+                          ', '}
+                        {urgentEvents.filter((e) => e.type !== 'maturity').length > 0 &&
+                          `${urgentEvents.filter((e) => e.type !== 'maturity').length} other event${
+                            urgentEvents.filter((e) => e.type !== 'maturity').length > 1 ? 's' : ''
+                          }`}
+                      </Text>
+                    </View>
+                  </View>
+                </LinearGradient>
+              </Animated.View>
             )}
 
-            {/* Upcoming */}
-            {upcomingEvents.length > 0 && (
+            {/* Events List */}
+            {filteredEvents.length === 0 ? (
+              <EmptyState />
+            ) : (
               <>
-                <View className={urgentEvents.length > 0 ? 'mt-4' : ''}>
-                  <SectionHeader title="Upcoming" count={upcomingEvents.length} />
-                </View>
-                {upcomingEvents.map((event, index) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    index={index + urgentEvents.length}
-                    onPress={() => handleEventPress(event)}
-                  />
-                ))}
+                {/* This Week */}
+                {urgentEvents.length > 0 && (
+                  <>
+                    <SectionHeader title="This Week" count={urgentEvents.length} />
+                    {urgentEvents.map((event, index) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        index={index}
+                        onPress={() => handleEventPress(event)}
+                      />
+                    ))}
+                  </>
+                )}
+
+                {/* Upcoming */}
+                {upcomingEvents.length > 0 && (
+                  <>
+                    <View className={urgentEvents.length > 0 ? 'mt-4' : ''}>
+                      <SectionHeader title="Upcoming" count={upcomingEvents.length} />
+                    </View>
+                    {upcomingEvents.map((event, index) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        index={index + urgentEvents.length}
+                        onPress={() => handleEventPress(event)}
+                      />
+                    ))}
+                  </>
+                )}
               </>
             )}
           </>

@@ -3,10 +3,13 @@ import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, AlertTriangle, Info, TrendingUp, DollarSign } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { useLegalStore } from '@/lib/legal-store';
 
 export default function DisclaimerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const acceptDisclaimer = useLegalStore((s) => s.acceptDisclaimer);
 
   return (
     <View className="flex-1 bg-[#0A0A0F]">
@@ -143,6 +146,27 @@ export default function DisclaimerScreen() {
             understood, and agree to this Investment Disclaimer.
           </Text>
         </View>
+
+        <Pressable
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            acceptDisclaimer();
+            router.replace('/(tabs)');
+          }}
+          className="mt-6 bg-indigo-600 rounded-2xl py-4 items-center justify-center"
+        >
+          <Text className="text-white font-bold text-base">I Understand</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/terms');
+          }}
+          className="mt-3 py-3 items-center justify-center"
+        >
+          <Text className="text-gray-400 text-sm">Read Terms of Service</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );

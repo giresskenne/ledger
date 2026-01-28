@@ -8,6 +8,7 @@ export type EventType =
   | 'dividend'           // Expected dividend
   | 'price_alert'        // Price target reached
   | 'contribution_reminder' // Room contribution reminder
+  | 'stale_valuation'    // Manual asset valuation is stale
   | 'rebalance';         // Portfolio rebalance suggestion
 
 export interface PortfolioEvent {
@@ -27,10 +28,15 @@ export interface PortfolioEvent {
 export interface NotificationPreferences {
   enabled: boolean;
   maturityAlerts: boolean;
+  // Legacy single-value preference (kept for backward compatibility)
   maturityDaysBefore: number; // Days before maturity to notify
+  // Cadence-based reminders (e.g. 90/30/7)
+  maturityDaysBeforeList: number[];
   priceAlerts: boolean;
   dividendAlerts: boolean;
   contributionReminders: boolean;
+  staleValuationReminders: boolean;
+  staleValuationDays: number;
   weeklyDigest: boolean;
 }
 
@@ -68,9 +74,12 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   enabled: true,
   maturityAlerts: true,
   maturityDaysBefore: 30,
+  maturityDaysBeforeList: [90, 30, 7],
   priceAlerts: true,
   dividendAlerts: true,
   contributionReminders: true,
+  staleValuationReminders: false,
+  staleValuationDays: 30,
   weeklyDigest: false,
 };
 
@@ -104,7 +113,7 @@ export const useNotificationsStore = create<NotificationsState>()(
       },
 
       syncGeneratedEvents: (generated) => {
-        const generatedPrefixes = ['maturity_', 'contrib_', 'assetcontrib_', 'rebalance_'];
+        const generatedPrefixes = ['maturity_', 'contrib_', 'assetcontrib_', 'rebalance_', 'stalevaluation_'];
         const isGenerated = (id: string) => generatedPrefixes.some((p) => id.startsWith(p));
 
         const now = Date.now();
@@ -230,6 +239,12 @@ export const EVENT_TYPE_INFO: Record<EventType, {
     icon: 'PiggyBank',
     color: '#EC4899',
     bgColor: '#EC489920',
+  },
+  stale_valuation: {
+    label: 'Update Value',
+    icon: 'RefreshCw',
+    color: '#F97316',
+    bgColor: '#F9731620',
   },
   rebalance: {
     label: 'Rebalance',
