@@ -36,12 +36,16 @@ function shouldNotifyForEvent(event: PortfolioEvent, prefs: NotificationPreferen
   switch (event.type) {
     case 'maturity':
       return prefs.maturityAlerts;
+    case 'amortization_milestone':
+      return prefs.amortizationAlerts;
     case 'dividend':
       return prefs.dividendAlerts;
     case 'price_alert':
       return prefs.priceAlerts;
     case 'contribution_reminder':
       return prefs.contributionReminders;
+    case 'stale_valuation':
+      return prefs.staleValuationReminders;
     case 'rebalance':
       return true;
     default:
@@ -64,19 +68,31 @@ function buildScheduledItems(event: PortfolioEvent, prefs: NotificationPreferenc
 
   // Maturity: schedule a heads-up X days before, plus a day-of reminder.
   if (event.type === 'maturity') {
-    const daysBefore = Math.max(0, Math.floor(prefs.maturityDaysBefore ?? 0));
     const maturityDay = nineAM(baseDate);
 
-    if (daysBefore > 0) {
+    const baseCadence =
+      prefs.maturityDaysBeforeList && prefs.maturityDaysBeforeList.length > 0
+        ? prefs.maturityDaysBeforeList
+        : [prefs.maturityDaysBefore ?? 0];
+
+    const uniqueCadence = Array.from(new Set(baseCadence))
+      .map((d) => Math.max(0, Math.floor(Number(d) || 0)))
+      .filter((d) => d > 0)
+      .sort((a, b) => b - a);
+
+    for (const daysBefore of uniqueCadence) {
       const headsUp = nineAM(addDays(maturityDay, -daysBefore));
-      if (withinWindow(headsUp, now)) {
-        items.push({
-          trigger: headsUp,
-          title: 'Maturity coming up',
-          body: event.title,
-          data: { [LEDGER_DATA_FLAG]: true, eventId: event.id, kind: 'maturity_heads_up' },
-        });
-      }
+      if (!withinWindow(headsUp, now)) continue;
+      items.push({
+        trigger: headsUp,
+        title: `Maturity in ${daysBefore} days`,
+        body: event.title,
+        data: {
+          [LEDGER_DATA_FLAG]: true,
+          eventId: event.id,
+          kind: `maturity_${daysBefore}d`,
+        },
+      });
     }
 
     if (withinWindow(maturityDay, now)) {
@@ -136,9 +152,13 @@ export function useScheduleLocalNotifications(): void {
       enabled: prefs.enabled,
       maturityAlerts: prefs.maturityAlerts,
       maturityDaysBefore: prefs.maturityDaysBefore,
+      maturityDaysBeforeList: prefs.maturityDaysBeforeList,
+      amortizationAlerts: prefs.amortizationAlerts,
       priceAlerts: prefs.priceAlerts,
       dividendAlerts: prefs.dividendAlerts,
       contributionReminders: prefs.contributionReminders,
+      staleValuationReminders: prefs.staleValuationReminders,
+      staleValuationDays: prefs.staleValuationDays,
       relevant,
     });
 

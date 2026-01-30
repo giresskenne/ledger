@@ -1,14 +1,26 @@
+/**
+ * Generates timeline "events" from app state (assets, room targets, autopilot).
+ * These events power the Events tab and local notification scheduling.
+ */
 import React from 'react';
 import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useNotificationsStore, type PortfolioEvent } from '@/lib/notifications-store';
-import { useRoomStore, getCurrentTaxYearId, formatTaxYear } from '@/lib/room-store';
+import {
+  useRoomStore,
+  getCurrentTaxYearId,
+  formatTaxYear,
+  type ContributionAutopilotSchedule,
+  type ContributionReminderLog,
+} from '@/lib/room-store';
 import { usePortfolioStore } from '@/lib/store';
 import { formatCurrency } from '@/lib/formatters';
+import { ACCOUNT_CONFIGS } from '@/lib/types';
 import type { Asset, PayFrequency, RegisteredAccountType } from '@/lib/types';
+import { buildEstimatedAmortizationSchedule, isFixedIncomeAsset } from '@/lib/amortization';
 
 type GeneratedEvent = Omit<PortfolioEvent, 'isRead' | 'createdAt'>;
 
-const GENERATED_PREFIXES = ['maturity_', 'contrib_', 'assetcontrib_', 'rebalance_'] as const;
+const GENERATED_PREFIXES = ['maturity_', 'contrib_', 'assetcontrib_', 'autopilot_', 'rebalance_'] as const;
 
 export function isGeneratedEventId(id: string): boolean {
   return GENERATED_PREFIXES.some((prefix) => id.startsWith(prefix));
@@ -103,6 +115,77 @@ function getNextContributionDueDate(frequency: PayFrequency, now = new Date()): 
   }
   // weekly
   return nextFriday(now);
+}
+
+function getAutopilotDisplayName(accountType: RegisteredAccountType): string {
+  const cfg = ACCOUNT_CONFIGS.find((c) => c.type === accountType);
+  return cfg?.shortName ?? accountType;
+}
+
+function getAutopilotScheduleOccurrenceId(params: {
+  schedule: ContributionAutopilotSchedule;
+  now: Date;
+}): { dueDate: Date; occurrenceId: string; headsUpDate: Date } | null {
+  const { schedule, now } = params;
+
+  // For autopilot we follow the user's selected cadence rather than the global savings frequency.
+  if (schedule.frequency === 'monthly') {
+    const day = Math.max(1, Math.min(28, Math.floor(schedule.dayOfMonth ?? 1)));
+    const dueThisMonth = dueDateForMonth({
+      year: now.getFullYear(),
+      monthIndex: now.getMonth(),
+      dayOfMonth: day,
+    });
+
+    const dueDate =
+      now.getTime() < dueThisMonth.getTime()
+        ? dueThisMonth
+        : dueDateForMonth({
+            year: now.getFullYear(),
+            monthIndex: now.getMonth() + 1,
+            dayOfMonth: day,
+          });
+
+    const occurrenceId = toMonthId(dueDate);
+    const headsUp = new Date(dueDate);
+    headsUp.setDate(headsUp.getDate() - 1);
+    headsUp.setHours(9, 0, 0, 0);
+    return { dueDate, occurrenceId, headsUpDate: headsUp };
+  }
+
+  const weekday = schedule.weekday ?? 5; // default Friday
+
+  if (schedule.frequency === 'weekly') {
+    // Pick the next upcoming weekday (this week if still upcoming; otherwise next week).
+    const dueThisWeek = thisWeeksDueDate(weekday, now);
+    const dueDate = now.getTime() < dueThisWeek.getTime() ? dueThisWeek : nextWeeksDueDate(weekday, now);
+    const occurrenceId = toDateId(dueDate);
+    const headsUp = new Date(dueDate);
+    headsUp.setDate(headsUp.getDate() - 1);
+    headsUp.setHours(9, 0, 0, 0);
+    return { dueDate, occurrenceId, headsUpDate: headsUp };
+  }
+
+  // biweekly: anchor on the last confirmed date when available, otherwise start with the next upcoming weekday.
+  const lastConfirmedDate = schedule.lastConfirmedId ? new Date(schedule.lastConfirmedId) : null;
+  let dueDate: Date;
+
+  if (lastConfirmedDate && !Number.isNaN(lastConfirmedDate.getTime())) {
+    const base = new Date(lastConfirmedDate);
+    base.setHours(9, 0, 0, 0);
+    const next = new Date(base);
+    next.setDate(next.getDate() + 14);
+    dueDate = next;
+  } else {
+    const dueThisWeek = thisWeeksDueDate(weekday, now);
+    dueDate = now.getTime() < dueThisWeek.getTime() ? dueThisWeek : nextWeeksDueDate(weekday, now);
+  }
+
+  const occurrenceId = toDateId(dueDate);
+  const headsUp = new Date(dueDate);
+  headsUp.setDate(headsUp.getDate() - 1);
+  headsUp.setHours(9, 0, 0, 0);
+  return { dueDate, occurrenceId, headsUpDate: headsUp };
 }
 
 export function generateAssetContributionEvents(assets: Asset[], now = new Date()): GeneratedEvent[] {
@@ -264,9 +347,128 @@ export function generateMaturityEvents(assets: Asset[]): GeneratedEvent[] {
   return events;
 }
 
+function getLastValuationDate(asset: Asset): Date {
+  const history = asset.valueHistory ?? [];
+  const latestHistory = history
+    .map((h) => new Date(h.date))
+    .filter((d) => !Number.isNaN(d.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+
+  if (latestHistory) return latestHistory;
+
+  const lastUpdated = new Date(asset.lastUpdated);
+  if (!Number.isNaN(lastUpdated.getTime())) return lastUpdated;
+
+  const purchaseDate = new Date(asset.purchaseDate);
+  if (!Number.isNaN(purchaseDate.getTime())) return purchaseDate;
+
+  return new Date();
+}
+
+export function generateStaleValuationEvents(params: {
+  assets: Asset[];
+  staleDays: number;
+}): GeneratedEvent[] {
+  const { assets, staleDays } = params;
+  const days = Math.max(1, Math.floor(staleDays));
+  const now = new Date();
+  const events: GeneratedEvent[] = [];
+
+  for (const asset of assets) {
+    if (!asset.isManual) continue;
+
+    const last = getLastValuationDate(asset);
+    const due = new Date(last);
+    due.setHours(9, 0, 0, 0);
+    due.setDate(due.getDate() + days);
+
+    const daysUntil = Math.ceil(
+      (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Keep the window similar to maturity: 30 days past due through 12 months ahead.
+    if (daysUntil < -30 || daysUntil > 365) continue;
+
+    events.push({
+      id: `stalevaluation_${asset.id}_${toISODateId(due)}`,
+      type: 'stale_valuation',
+      title: `Update ${asset.name}`,
+      description:
+        daysUntil <= 0
+          ? 'Value is stale — tap to update'
+          : daysUntil === 1
+            ? 'Value becomes stale tomorrow'
+            : `Value becomes stale in ${daysUntil} days`,
+      date: due.toISOString(),
+      assetId: asset.id,
+      assetName: asset.name,
+      currency: asset.currency,
+    });
+  }
+
+  return events;
+}
+
+export function generateAmortizationMilestoneEvents(assets: Asset[]): GeneratedEvent[] {
+  const events: GeneratedEvent[] = [];
+  const now = new Date();
+
+  for (const asset of assets) {
+    if (!isFixedIncomeAsset(asset)) continue;
+    if (!asset.maturityDate) continue;
+    if (asset.interestRate === undefined || asset.interestRate === null) continue;
+
+    const maturity = new Date(asset.maturityDate);
+    if (Number.isNaN(maturity.getTime())) continue;
+
+    const principal = (Number(asset.purchasePrice) || 0) * (Number(asset.quantity) || 0);
+    if (!Number.isFinite(principal) || principal <= 0) continue;
+
+    const start = new Date(now);
+    start.setHours(9, 0, 0, 0);
+
+    const { rows } = buildEstimatedAmortizationSchedule({
+      principal,
+      annualInterestRatePercent: asset.interestRate,
+      startDate: start,
+      maturityDate: maturity,
+    });
+
+    if (rows.length === 0) continue;
+
+    const thresholds = [0.25, 0.5, 0.75];
+    for (const t of thresholds) {
+      const targetRemaining = principal * (1 - t);
+      const row = rows.find((r) => r.remainingPrincipal <= targetRemaining);
+      if (!row) continue;
+
+      const date = new Date(row.date);
+      const daysUntil = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntil < -30 || daysUntil > 365) continue;
+
+      const pct = Math.round(t * 100);
+      events.push({
+        id: `amortization_${asset.id}_${pct}_${toISODateId(date)}`,
+        type: 'amortization_milestone',
+        title: `${asset.name} — ${pct}% principal repaid`,
+        description: `Estimated milestone based on your maturity date and interest rate.`,
+        date: date.toISOString(),
+        assetId: asset.id,
+        assetName: asset.name,
+        amount: principal * t,
+        currency: asset.currency,
+      });
+    }
+  }
+
+  return events;
+}
+
 export function generateContributionEvents(params: {
   enabledAccountTypes: RegisteredAccountType[];
   payFrequency: PayFrequency;
+  autopilotSchedules?: Partial<Record<RegisteredAccountType, ContributionAutopilotSchedule>>;
+  contributionReminderLog?: ContributionReminderLog;
   getSavingsTarget: (accountType: RegisteredAccountType) => {
     perPeriodTarget: number;
     frequency: PayFrequency;
@@ -278,6 +480,8 @@ export function generateContributionEvents(params: {
   const {
     enabledAccountTypes,
     payFrequency,
+    autopilotSchedules,
+    contributionReminderLog,
     getSavingsTarget,
     currency,
     taxYearId,
@@ -285,9 +489,14 @@ export function generateContributionEvents(params: {
 
   const now = new Date();
   const dueDate = getNextContributionDueDate(payFrequency, now);
+  const occurrenceId = toISODateId(dueDate);
   const events: GeneratedEvent[] = [];
 
   for (const accountType of enabledAccountTypes) {
+    // If the user enabled autopilot for this account, skip the generic "set aside" reminder.
+    if (autopilotSchedules?.[accountType]?.enabled) continue;
+    if (contributionReminderLog?.[accountType] === occurrenceId) continue;
+
     const target = getSavingsTarget(accountType);
     if (!target) continue;
 
@@ -295,11 +504,69 @@ export function generateContributionEvents(params: {
     if (amount <= 0) continue;
 
     events.push({
-      id: `contrib_${accountType}_${toISODateId(dueDate)}`,
+      id: `contrib_${accountType}_${occurrenceId}`,
       type: 'contribution_reminder',
       title: `${accountType} Contribution Due`,
       description: `Set aside ${formatCurrency(amount, currency)} this ${payFrequency} to stay on track for ${formatTaxYear(taxYearId)}.`,
       date: dueDate.toISOString(),
+      amount,
+      currency: typeof currency === 'string' ? currency : undefined,
+    });
+  }
+
+  return events;
+}
+
+export function generateAutopilotContributionEvents(params: {
+  enabledAccountTypes: RegisteredAccountType[];
+  autopilotSchedules: Partial<Record<RegisteredAccountType, ContributionAutopilotSchedule>>;
+  currency: Parameters<typeof formatCurrency>[1];
+  taxYearId: string;
+}): GeneratedEvent[] {
+  const { enabledAccountTypes, autopilotSchedules, currency, taxYearId } = params;
+  const now = new Date();
+  const events: GeneratedEvent[] = [];
+
+  // Generate for any enabled account type, plus any account that has an Autopilot schedule configured.
+  const accountTypes = Array.from(
+    new Set([
+      ...enabledAccountTypes,
+      ...Object.keys(autopilotSchedules ?? {}),
+    ])
+  ) as RegisteredAccountType[];
+
+  for (const accountType of accountTypes) {
+    const schedule = autopilotSchedules[accountType];
+    if (!schedule?.enabled) continue;
+    if (!Number.isFinite(schedule.amount) || schedule.amount <= 0) continue;
+
+    const next = getAutopilotScheduleOccurrenceId({ schedule, now });
+    if (!next) continue;
+
+    // If this occurrence was already confirmed, don't show reminders for it.
+    if (schedule.lastConfirmedId === next.occurrenceId) continue;
+
+    const label = getAutopilotDisplayName(accountType);
+    const amount = Math.round(schedule.amount);
+
+    // Heads-up reminder (tomorrow) to ensure funds are available for the debit.
+    events.push({
+      id: `autopilot_${accountType}_${schedule.frequency}_${next.occurrenceId}_headsUp`,
+      type: 'contribution_reminder',
+      title: `${label} debit tomorrow`,
+      description: `Reminder: keep ${formatCurrency(amount, currency)} available so your scheduled contribution goes through. You'll confirm it tomorrow.`,
+      date: next.headsUpDate.toISOString(),
+      amount,
+      currency: typeof currency === 'string' ? currency : undefined,
+    });
+
+    // Day-of confirmation to log the contribution in-app (keeps room tracking accurate).
+    events.push({
+      id: `autopilot_${accountType}_${schedule.frequency}_${next.occurrenceId}_dayOf`,
+      type: 'contribution_reminder',
+      title: `Confirm ${label} contribution`,
+      description: `Tap to log ${formatCurrency(amount, currency)} and keep your ${formatTaxYear(taxYearId)} room accurate. (We'll cap it if needed.)`,
+      date: next.dueDate.toISOString(),
       amount,
       currency: typeof currency === 'string' ? currency : undefined,
     });
@@ -341,6 +608,8 @@ export function generateGeneratedEvents(params: {
   assets: Asset[];
   enabledAccountTypes: RegisteredAccountType[];
   payFrequency: PayFrequency;
+  autopilotSchedules: Partial<Record<RegisteredAccountType, ContributionAutopilotSchedule>>;
+  contributionReminderLog: ContributionReminderLog;
   getSavingsTarget: (accountType: RegisteredAccountType) => {
     perPeriodTarget: number;
     frequency: PayFrequency;
@@ -349,16 +618,39 @@ export function generateGeneratedEvents(params: {
   currency: Parameters<typeof formatCurrency>[1];
   taxYearId: string | null;
   riskSummary: { overallRiskScore: number; suggestions: string[] };
+  notificationPrefs: { staleValuationReminders: boolean; staleValuationDays: number; amortizationAlerts: boolean };
 }): GeneratedEvent[] {
   const maturity = generateMaturityEvents(params.assets);
   const assetContrib = generateAssetContributionEvents(params.assets);
+  const amortization = params.notificationPrefs.amortizationAlerts
+    ? generateAmortizationMilestoneEvents(params.assets)
+    : [];
+  const staleValuation =
+    params.notificationPrefs.staleValuationReminders
+      ? generateStaleValuationEvents({
+          assets: params.assets,
+          staleDays: params.notificationPrefs.staleValuationDays,
+        })
+      : [];
 
   const contribution =
     params.taxYearId && params.enabledAccountTypes.length > 0
       ? generateContributionEvents({
           enabledAccountTypes: params.enabledAccountTypes,
           payFrequency: params.payFrequency,
+          autopilotSchedules: params.autopilotSchedules,
+          contributionReminderLog: params.contributionReminderLog,
           getSavingsTarget: params.getSavingsTarget,
+          currency: params.currency,
+          taxYearId: params.taxYearId,
+        })
+      : [];
+
+  const autopilot =
+    params.taxYearId && params.enabledAccountTypes.length > 0
+      ? generateAutopilotContributionEvents({
+          enabledAccountTypes: params.enabledAccountTypes,
+          autopilotSchedules: params.autopilotSchedules,
           currency: params.currency,
           taxYearId: params.taxYearId,
         })
@@ -369,7 +661,7 @@ export function generateGeneratedEvents(params: {
     hasAssets: params.assets.length > 0,
   });
 
-  return [...maturity, ...assetContrib, ...contribution, ...rebalance];
+  return [...maturity, ...amortization, ...assetContrib, ...staleValuation, ...autopilot, ...contribution, ...rebalance];
 }
 
 export function useSyncGeneratedEvents(): () => void {
@@ -387,11 +679,14 @@ export function useSyncGeneratedEvents(): () => void {
   const jurisdictionProfile = useRoomStore((s) => s.jurisdictionProfile);
   const payFrequency = useRoomStore((s) => s.payFrequency);
   const getSavingsTarget = useRoomStore((s) => s.getSavingsTarget);
+  const autopilotSchedules = useRoomStore((s) => s.autopilotSchedules);
+  const contributionReminderLog = useRoomStore((s) => s.contributionReminderLog);
 
   const enabledAccountTypes = useOnboardingStore((s) => s.selectedRegisteredAccounts);
   const currency = useOnboardingStore((s) => s.selectedCurrency);
 
   const syncGeneratedEvents = useNotificationsStore((s) => s.syncGeneratedEvents);
+  const notificationPrefs = useNotificationsStore((s) => s.preferences);
 
   const taxYearId = React.useMemo(() => {
     if (!jurisdictionProfile) return null;
@@ -403,12 +698,19 @@ export function useSyncGeneratedEvents(): () => void {
       assets,
       enabledAccountTypes,
       payFrequency,
+      autopilotSchedules,
+      contributionReminderLog,
       getSavingsTarget,
       currency,
       taxYearId,
       riskSummary: { overallRiskScore: risk.overallRiskScore, suggestions: risk.suggestions },
+      notificationPrefs: {
+        staleValuationReminders: notificationPrefs.staleValuationReminders,
+        staleValuationDays: notificationPrefs.staleValuationDays,
+        amortizationAlerts: notificationPrefs.amortizationAlerts,
+      },
     });
-  }, [assets, enabledAccountTypes, payFrequency, getSavingsTarget, currency, taxYearId, risk]);
+  }, [assets, enabledAccountTypes, payFrequency, autopilotSchedules, contributionReminderLog, getSavingsTarget, currency, taxYearId, risk, notificationPrefs.staleValuationDays, notificationPrefs.staleValuationReminders, notificationPrefs.amortizationAlerts]);
 
   // Apply auto-recurring contributions when due (best-effort; runs while app is open).
   React.useEffect(() => {

@@ -1,3 +1,7 @@
+/**
+ * Local store for registered-account room tracking (limits, contributions, overrides).
+ * Also holds "Contribution Autopilot" settings used to generate reminders and confirm logging.
+ */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,6 +16,22 @@ import {
   JURISDICTION_INFO,
   Currency,
 } from './types';
+
+export type ContributionAutopilotSchedule = {
+  enabled: boolean;
+  // Contribution amount to log when the user confirms the reminder.
+  amount: number;
+  // The cadence the user wants to follow (separate from their savings frequency display).
+  frequency: PayFrequency;
+  // For monthly: day of month (1–28) to avoid month-length edge cases.
+  dayOfMonth?: number;
+  // For weekly/biweekly: weekday (0=Sun..6=Sat).
+  weekday?: number;
+  // Last confirmed occurrence id (monthly: YYYY-MM, otherwise YYYY-MM-DD).
+  lastConfirmedId?: string;
+};
+
+export type ContributionReminderLog = Partial<Record<RegisteredAccountType, string>>;
 
 // Helper to get current tax year ID based on jurisdiction
 export function getCurrentTaxYearId(jurisdiction: JurisdictionCode): string {
@@ -136,6 +156,9 @@ export function getCurrencySymbol(jurisdiction: JurisdictionCode): string {
 
 // Format currency value
 export function formatRoomCurrency(amount: number, jurisdiction: JurisdictionCode): string {
+  // Some account types (e.g., US 529) do not have a single standard cap; we represent those limits as Infinity.
+  // Render these as human-friendly text to avoid "Infinity" leaking into the UI.
+  if (!Number.isFinite(amount)) return 'No cap';
   const symbol = getCurrencySymbol(jurisdiction);
   return `${symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
@@ -151,22 +174,67 @@ interface RoomState {
   // Room overrides (user-entered official values)
   roomOverrides: Record<string, number>; // key: `${accountType}_${taxYearId}`
 
+  // Contribution Autopilot (confirmation-based; does not connect to the bank).
+  autopilotSchedules: Partial<Record<RegisteredAccountType, ContributionAutopilotSchedule>>;
+
+  // Track which "save-to-max" reminder occurrence has been logged to avoid duplicate events.
+  contributionReminderLog: ContributionReminderLog;
+
   // Actions
   setJurisdictionProfile: (profile: JurisdictionProfile) => void;
   updateJurisdictionProfile: (updates: Partial<JurisdictionProfile>) => void;
   setPayFrequency: (frequency: PayFrequency) => void;
 
   // Contribution actions
-  addContribution: (contribution: Omit<Contribution, 'id'>) => void;
+  addContribution: (contribution: Omit<Contribution, 'id'>) => {
+    ok: boolean;
+    appliedAmount: number;
+    wasCapped: boolean;
+    remainingAfter: number;
+    reason?: string;
+  };
   updateContribution: (id: string, updates: Partial<Contribution>) => void;
   deleteContribution: (id: string) => void;
 
   // Room override actions
   setRoomOverride: (accountType: RegisteredAccountType, taxYearId: string, value: number | undefined) => void;
 
+  // Autopilot actions
+  setAutopilotSchedule: (
+    accountType: RegisteredAccountType,
+    schedule: Partial<ContributionAutopilotSchedule> | null
+  ) => void;
+  confirmAutopilotOccurrence: (params: {
+    accountType: RegisteredAccountType;
+    occurrenceId: string;
+    amount: number;
+    date: string;
+  }) => {
+    ok: boolean;
+    appliedAmount: number;
+    wasCapped: boolean;
+    remainingAfter: number;
+    reason?: string;
+  };
+
+  confirmContributionReminderOccurrence: (params: {
+    accountType: RegisteredAccountType;
+    occurrenceId: string;
+    amount: number;
+    date: string;
+  }) => {
+    ok: boolean;
+    appliedAmount: number;
+    wasCapped: boolean;
+    remainingAfter: number;
+    reason?: string;
+  };
+
   // Computed
   getContributionsForAccount: (accountType: RegisteredAccountType, taxYearId: string) => Contribution[];
   getTotalContributed: (accountType: RegisteredAccountType, taxYearId: string) => number;
+  getLifetimeContributed: (accountType: RegisteredAccountType) => number;
+  getRemainingRoomForTaxYear: (accountType: RegisteredAccountType, taxYearId: string) => number;
   getRemainingRoom: (accountType: RegisteredAccountType) => number;
   getSavingsTarget: (accountType: RegisteredAccountType) => SavingsTarget | null;
   getAccountsForJurisdiction: () => typeof ACCOUNT_CONFIGS;
@@ -182,6 +250,8 @@ export const useRoomStore = create<RoomState>()(
       payFrequency: 'monthly',
       contributions: [],
       roomOverrides: {},
+      autopilotSchedules: {},
+      contributionReminderLog: {},
 
       setJurisdictionProfile: (profile) => set({ jurisdictionProfile: profile }),
 
@@ -194,14 +264,146 @@ export const useRoomStore = create<RoomState>()(
 
       setPayFrequency: (frequency) => set({ payFrequency: frequency }),
 
+      setAutopilotSchedule: (accountType, schedule) =>
+        set((state) => {
+          const next = { ...state.autopilotSchedules };
+
+          if (!schedule) {
+            delete next[accountType];
+            return { autopilotSchedules: next };
+          }
+
+          const prev = state.autopilotSchedules[accountType];
+
+          // Keep existing lastConfirmedId unless explicitly provided.
+          const merged: ContributionAutopilotSchedule = {
+            enabled: schedule.enabled ?? prev?.enabled ?? false,
+            amount: schedule.amount ?? prev?.amount ?? 0,
+            frequency: schedule.frequency ?? prev?.frequency ?? 'monthly',
+            dayOfMonth: schedule.dayOfMonth ?? prev?.dayOfMonth,
+            weekday: schedule.weekday ?? prev?.weekday,
+            lastConfirmedId: schedule.lastConfirmedId ?? prev?.lastConfirmedId,
+          };
+
+          next[accountType] = merged;
+          return { autopilotSchedules: next };
+        }),
+
+      confirmAutopilotOccurrence: ({ accountType, occurrenceId, amount, date }) => {
+        const { jurisdictionProfile } = get();
+        if (!jurisdictionProfile) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: 0, reason: 'No jurisdiction profile set' };
+        }
+
+        // Prevent double-logging the same occurrence.
+        const currentSchedule = get().autopilotSchedules[accountType];
+        if (currentSchedule?.lastConfirmedId === occurrenceId) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: get().getRemainingRoom(accountType), reason: 'Already confirmed' };
+        }
+
+        const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
+        const currency = JURISDICTION_INFO[jurisdictionProfile.countryCode].currency;
+
+        // Log as a normal contribution (still capped by limits) and attach a small note.
+        const result = get().addContribution({
+          accountType,
+          taxYearId,
+          amount,
+          currency,
+          date,
+          source: 'manual',
+          notes: 'Autopilot confirmed',
+        });
+
+        if (!result.ok) return result;
+
+        // Mark the occurrence as confirmed so future sync removes the reminder.
+        get().setAutopilotSchedule(accountType, { lastConfirmedId: occurrenceId });
+        return result;
+      },
+
+      confirmContributionReminderOccurrence: ({ accountType, occurrenceId, amount, date }) => {
+        const { jurisdictionProfile } = get();
+        if (!jurisdictionProfile) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: 0, reason: 'No jurisdiction profile set' };
+        }
+
+        // Prevent double-logging the same occurrence.
+        if (get().contributionReminderLog[accountType] === occurrenceId) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: get().getRemainingRoom(accountType), reason: 'Already logged' };
+        }
+
+        const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
+        const currency = JURISDICTION_INFO[jurisdictionProfile.countryCode].currency;
+
+        const result = get().addContribution({
+          accountType,
+          taxYearId,
+          amount,
+          currency,
+          date,
+          source: 'manual',
+          notes: 'Contribution reminder logged',
+        });
+
+        if (!result.ok) return result;
+
+        set((state) => ({
+          contributionReminderLog: { ...state.contributionReminderLog, [accountType]: occurrenceId },
+        }));
+
+        return result;
+      },
+
       addContribution: (contributionData) => {
+        const { jurisdictionProfile, roomOverrides } = get();
+        if (!jurisdictionProfile) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: 0, reason: 'No jurisdiction profile set' };
+        }
+
+        const config = ACCOUNT_CONFIGS.find((c) => c.type === contributionData.accountType);
+        if (!config) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: 0, reason: 'Unknown account type' };
+        }
+
+        const overrideKey = `${contributionData.accountType}_${contributionData.taxYearId}`;
+        const computedLimit = getEffectiveAnnualLimit(contributionData.accountType, jurisdictionProfile.birthDate);
+        const effectiveAnnualLimit = roomOverrides[overrideKey] ?? computedLimit;
+
+        const contributedThisYear = get().getTotalContributed(contributionData.accountType, contributionData.taxYearId);
+        const annualRemaining = Math.max(0, effectiveAnnualLimit - contributedThisYear);
+
+        const lifetimeLimit = config.lifetimeLimit;
+        const lifetimeRemaining = lifetimeLimit !== undefined
+          ? Math.max(0, lifetimeLimit - get().getLifetimeContributed(contributionData.accountType))
+          : Number.POSITIVE_INFINITY;
+
+        const remaining = Math.max(0, Math.min(annualRemaining, lifetimeRemaining));
+        if (remaining <= 0) {
+          return {
+            ok: false,
+            appliedAmount: 0,
+            wasCapped: true,
+            remainingAfter: 0,
+            reason: 'No contribution room remaining',
+          };
+        }
+
+        const appliedAmount = Math.min(contributionData.amount, remaining);
+        const wasCapped = appliedAmount < contributionData.amount;
+        const remainingAfter = Math.max(0, remaining - appliedAmount);
+
         const newContribution: Contribution = {
           ...contributionData,
+          amount: appliedAmount,
           id: Date.now().toString(),
         };
+
         set((state) => ({
           contributions: [...state.contributions, newContribution],
         }));
+
+        return { ok: true, appliedAmount, wasCapped, remainingAfter };
       },
 
       updateContribution: (id, updates) =>
@@ -239,14 +441,19 @@ export const useRoomStore = create<RoomState>()(
         return contributions.reduce((sum, c) => sum + c.amount, 0);
       },
 
-      getRemainingRoom: (accountType) => {
+      getLifetimeContributed: (accountType) => {
+        return get().contributions
+          .filter((c) => c.accountType === accountType)
+          .reduce((sum, c) => sum + c.amount, 0);
+      },
+
+      getRemainingRoomForTaxYear: (accountType, taxYearId) => {
         const { jurisdictionProfile, roomOverrides } = get();
         if (!jurisdictionProfile) return 0;
 
         const config = ACCOUNT_CONFIGS.find((c) => c.type === accountType);
         if (!config) return 0;
 
-        const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
         const overrideKey = `${accountType}_${taxYearId}`;
 
         // Get effective limit (with catch-up if applicable)
@@ -261,7 +468,24 @@ export const useRoomStore = create<RoomState>()(
         // Get contributions
         const totalContributed = get().getTotalContributed(accountType, taxYearId);
 
-        return Math.max(0, effectiveLimit - totalContributed);
+        const annualRemaining = Math.max(0, effectiveLimit - totalContributed);
+
+        // FHSA also has a lifetime cap; apply if present in config.
+        const lifetimeLimit = config.lifetimeLimit;
+        if (lifetimeLimit !== undefined) {
+          const lifetimeContributed = get().getLifetimeContributed(accountType);
+          const lifetimeRemaining = Math.max(0, lifetimeLimit - lifetimeContributed);
+          return Math.max(0, Math.min(annualRemaining, lifetimeRemaining));
+        }
+
+        return annualRemaining;
+      },
+
+      getRemainingRoom: (accountType) => {
+        const { jurisdictionProfile } = get();
+        if (!jurisdictionProfile) return 0;
+        const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
+        return get().getRemainingRoomForTaxYear(accountType, taxYearId);
       },
 
       getSavingsTarget: (accountType) => {
@@ -272,6 +496,8 @@ export const useRoomStore = create<RoomState>()(
         if (!config) return null;
 
         const remainingRoom = get().getRemainingRoom(accountType);
+        // Skip save-to-max for accounts without a standard cap (e.g., 529) to avoid Infinity targets.
+        if (!Number.isFinite(remainingRoom)) return null;
         if (remainingRoom <= 0) return null;
 
         const periodsLeft = countPeriodsUntilEnd(
@@ -308,6 +534,8 @@ export const useRoomStore = create<RoomState>()(
           payFrequency: 'monthly',
           contributions: [],
           roomOverrides: {},
+          autopilotSchedules: {},
+          contributionReminderLog: {},
         }),
     }),
     {
@@ -318,6 +546,8 @@ export const useRoomStore = create<RoomState>()(
         payFrequency: state.payFrequency,
         contributions: state.contributions,
         roomOverrides: state.roomOverrides,
+        autopilotSchedules: state.autopilotSchedules,
+        contributionReminderLog: state.contributionReminderLog,
       }),
     }
   )

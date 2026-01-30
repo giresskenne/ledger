@@ -26,6 +26,7 @@ import {
   DollarSign,
   PiggyBank,
   TrendingUp,
+  RefreshCw,
   ChevronDown,
   ChevronUp,
   Bug,
@@ -37,6 +38,7 @@ import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useNotificationsStore } from '@/lib/notifications-store';
 import { useBiometricsStore } from '@/lib/biometrics-store';
 import { useTheme } from '@/lib/theme-store';
+import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
 import { cn } from '@/lib/cn';
 import { PremiumPaywall, type PaywallFeature } from '@/components/PremiumPaywall';
 
@@ -46,6 +48,8 @@ export default function SettingsScreen() {
   const { mode, theme, isDark } = useTheme();
   const biometricsEnabled = useBiometricsStore((s) => s.enabled);
   const setBiometricsEnabled = useBiometricsStore((s) => s.setEnabled);
+  const hidePerformanceMetrics = useUIPreferencesStore((s) => s.hidePerformanceMetrics);
+  const setHidePerformanceMetrics = useUIPreferencesStore((s) => s.setHidePerformanceMetrics);
   const [notificationsExpanded, setNotificationsExpanded] = React.useState(false);
   const [paywallPreviewOpen, setPaywallPreviewOpen] = React.useState(false);
   const [paywallPreviewFeature, setPaywallPreviewFeature] = React.useState<PaywallFeature>('analysis');
@@ -267,8 +271,8 @@ export default function SettingsScreen() {
                   <Sparkles size={20} color="white" />
                 </View>
                 <View className="flex-1 ml-3">
-                  <Text className="text-white font-bold">Upgrade to Premium</Text>
-                  <Text className="text-white/80 text-sm">Unlock risk analysis & more</Text>
+                  <Text className="text-white font-bold">Unlock Premium</Text>
+                  <Text className="text-white/80 text-sm">Feel confident seeing the full picture</Text>
                 </View>
                 <ChevronRight size={20} color="white" />
               </LinearGradient>
@@ -563,6 +567,76 @@ export default function SettingsScreen() {
                   />
                 </View>
 
+                {/* Maturity cadence */}
+                {preferences.maturityAlerts && (
+                  <View
+                    className="px-6 pb-4 border-b"
+                    style={{ borderBottomColor: theme.borderLight }}
+                  >
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-3">
+                      Remind me
+                    </Text>
+                    <View className="flex-row mt-2">
+                      {[90, 30, 7].map((days) => {
+                        const list = preferences.maturityDaysBeforeList ?? [preferences.maturityDaysBefore ?? 30];
+                        const selected = list.includes(days);
+                        return (
+                          <Pressable
+                            key={days}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              const next = selected
+                                ? list.filter((d) => d !== days)
+                                : [...list, days];
+                              const normalized = Array.from(new Set(next))
+                                .map((d) => Math.max(1, Math.floor(d)))
+                                .sort((a, b) => b - a);
+                              setPreferences({
+                                maturityDaysBeforeList: normalized.length > 0 ? normalized : [30],
+                                maturityDaysBefore: (normalized.includes(30) ? 30 : normalized[0]) ?? 30,
+                              });
+                            }}
+                            className={cn(
+                              'px-3 py-2 rounded-full mr-2',
+                              selected ? 'bg-indigo-600' : 'bg-white/10'
+                            )}
+                          >
+                            <Text className={cn('text-xs font-semibold', selected ? 'text-white' : 'text-gray-300')}>
+                              {days}d
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {/* Amortization milestone alerts */}
+                <View
+                  className="flex-row items-center p-4 pl-6 border-b"
+                  style={{ borderBottomColor: theme.borderLight }}
+                >
+                  <View className="w-8 h-8 rounded-full bg-purple-500/10 items-center justify-center">
+                    <RefreshCw size={16} color="#A855F7" />
+                  </View>
+                  <View className="flex-1 ml-3">
+                    <Text style={{ color: theme.text }} className="text-sm">
+                      Amortization Milestones
+                    </Text>
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-0.5">
+                      Estimated principal milestones for fixed income
+                    </Text>
+                  </View>
+                  <Switch
+                    value={preferences.amortizationAlerts}
+                    onValueChange={(value) =>
+                      handleToggleNotification('amortizationAlerts', value)
+                    }
+                    trackColor={{ false: isDark ? '#374151' : '#D1D5DB', true: theme.primary }}
+                    thumbColor="white"
+                  />
+                </View>
+
                 {/* Price Alerts */}
                 <View
                   className="flex-row items-center p-4 pl-6 border-b"
@@ -625,6 +699,65 @@ export default function SettingsScreen() {
                   />
                 </View>
 
+                {/* Stale Valuation Reminders */}
+                <View
+                  className="flex-row items-center p-4 pl-6 border-b"
+                  style={{ borderBottomColor: theme.borderLight }}
+                >
+                  <View className="w-8 h-8 rounded-full bg-orange-500/10 items-center justify-center">
+                    <RefreshCw size={16} color="#F97316" />
+                  </View>
+                  <View className="flex-1 ml-3">
+                    <Text style={{ color: theme.text }} className="text-sm">
+                      Stale Valuation Reminders
+                    </Text>
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-0.5">
+                      Remind you to refresh manual values
+                    </Text>
+                  </View>
+                  <Switch
+                    value={preferences.staleValuationReminders}
+                    onValueChange={(value) =>
+                      handleToggleNotification('staleValuationReminders', value)
+                    }
+                    trackColor={{ false: isDark ? '#374151' : '#D1D5DB', true: theme.primary }}
+                    thumbColor="white"
+                  />
+                </View>
+
+                {preferences.staleValuationReminders && (
+                  <View
+                    className="px-6 pb-4 border-b"
+                    style={{ borderBottomColor: theme.borderLight }}
+                  >
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-3">
+                      Stale after
+                    </Text>
+                    <View className="flex-row mt-2">
+                      {[14, 30, 60].map((days) => {
+                        const selected = preferences.staleValuationDays === days;
+                        return (
+                          <Pressable
+                            key={days}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              setPreferences({ staleValuationDays: days });
+                            }}
+                            className={cn(
+                              'px-3 py-2 rounded-full mr-2',
+                              selected ? 'bg-indigo-600' : 'bg-white/10'
+                            )}
+                          >
+                            <Text className={cn('text-xs font-semibold', selected ? 'text-white' : 'text-gray-300')}>
+                              {days}d
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
                 {/* Contribution Reminders */}
                 <View className="flex-row items-center p-4 pl-6">
                   <View className="w-8 h-8 rounded-full bg-pink-500/10 items-center justify-center">
@@ -674,6 +807,21 @@ export default function SettingsScreen() {
               value="USD"
               showArrow
               onPress={() => router.push('/currency-selector')}
+            />
+            <SettingsRow
+              icon={<TrendingUp size={20} color="#6366F1" />}
+              label="Hide Performance Metrics"
+              rightElement={
+                <Switch
+                  value={hidePerformanceMetrics}
+                  onValueChange={(value) => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setHidePerformanceMetrics(value);
+                  }}
+                  trackColor={{ false: isDark ? '#374151' : '#D1D5DB', true: theme.primary }}
+                  thumbColor="white"
+                />
+              }
             />
             <SettingsRow
               icon={<Moon size={20} color="#8B5CF6" />}

@@ -71,6 +71,8 @@ export default function PrivacyScreen() {
           <BulletPoint title="Third-Party Services">
             When fetching market data, your device may connect to Stooq and
             Alpha Vantage APIs. These requests include ticker symbols only.
+            If you choose to use AI insights, the app may also connect to OpenAI
+            and send an aggregated portfolio summary (no personal identifiers).
           </BulletPoint>
         </Section>
 
@@ -104,6 +106,7 @@ export default function PrivacyScreen() {
           {'\n'}• <Text className="text-white">RevenueCat</Text> - Subscription management
           {'\n'}• <Text className="text-white">Stooq</Text> - Stock market data
           {'\n'}• <Text className="text-white">Alpha Vantage</Text> - FX and crypto data
+          {'\n'}• <Text className="text-white">OpenAI</Text> - Optional AI-generated portfolio insights
           {'\n\n'}Each service has its own privacy policy that governs their use
           of your data.
         </Section>

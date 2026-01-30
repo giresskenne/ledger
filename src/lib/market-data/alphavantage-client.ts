@@ -2,6 +2,8 @@ import type {
   MarketDataResult,
   PriceData,
   FXRate,
+  HistoricalData,
+  HistoricalPrice,
   AlphaVantageQuote,
   AlphaVantageFXRate,
 } from './types';
@@ -251,6 +253,109 @@ export async function fetchCryptoQuote(
       reason: 'Network error fetching crypto price',
       error,
     };
+  }
+}
+
+// ============================================
+// Crypto Historical (Daily)
+// ============================================
+
+type AlphaVantageDigitalCurrencyDailyPoint = Record<string, string>;
+
+type AlphaVantageDigitalCurrencyDailyResponse = {
+  'Meta Data'?: Record<string, string>;
+  'Time Series (Digital Currency Daily)'?: Record<string, AlphaVantageDigitalCurrencyDailyPoint>;
+  Note?: string;
+  'Error Message'?: string;
+};
+
+export async function fetchCryptoHistorical(
+  symbol: string,
+  market: string = 'USD',
+  days: number = 365
+): Promise<MarketDataResult<HistoricalData>> {
+  const cacheKey = `CRYPTO_DAILY_${symbol}_${market}_${days}`;
+
+  const cached = await getCachedData<HistoricalData>('historical', cacheKey);
+  if (cached) return { ok: true, data: cached };
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+    if (stale) return { ok: true, data: stale.data };
+    return {
+      ok: false,
+      reason: 'Alpha Vantage API key not configured. Add EXPO_PUBLIC_ALPHAVANTAGE_API_KEY in ENV tab.',
+    };
+  }
+
+  try {
+    const url = `${ALPHA_VANTAGE_BASE_URL}?function=DIGITAL_CURRENCY_DAILY&symbol=${symbol.toUpperCase()}&market=${market.toUpperCase()}&apikey=${apiKey}`;
+    const response = await rateLimitedFetch(url);
+
+    if (!response.ok) {
+      const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+      if (stale) return { ok: true, data: stale.data };
+      return { ok: false, reason: `HTTP ${response.status}` };
+    }
+
+    const data = (await response.json()) as AlphaVantageDigitalCurrencyDailyResponse;
+    if (data['Error Message'] || data.Note) {
+      const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+      if (stale) return { ok: true, data: stale.data };
+      return { ok: false, reason: data['Error Message'] || 'API rate limit reached' };
+    }
+
+    const series = data['Time Series (Digital Currency Daily)'];
+    if (!series) return { ok: false, reason: 'Invalid API response' };
+
+    const points = Object.entries(series)
+      .map(([date, point]) => {
+        const closeKey = `4a. close (${market.toUpperCase()})`;
+        const openKey = `1a. open (${market.toUpperCase()})`;
+        const highKey = `2a. high (${market.toUpperCase()})`;
+        const lowKey = `3a. low (${market.toUpperCase()})`;
+        const volumeKey = '5. volume';
+
+        const close = Number(point[closeKey]);
+        if (!Number.isFinite(close)) return null;
+
+        const open = Number(point[openKey]);
+        const high = Number(point[highKey]);
+        const low = Number(point[lowKey]);
+        const volume = Number(point[volumeKey]);
+
+        const row: HistoricalPrice = {
+          date,
+          open: Number.isFinite(open) ? open : close,
+          high: Number.isFinite(high) ? high : close,
+          low: Number.isFinite(low) ? low : close,
+          close,
+          volume: Number.isFinite(volume) ? volume : undefined,
+        };
+
+        return row;
+      })
+      .filter((p): p is HistoricalPrice => p !== null)
+      // sort ascending for charts
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const limited = points.slice(Math.max(0, points.length - days));
+
+    const historical: HistoricalData = {
+      symbol: symbol.toUpperCase(),
+      prices: limited,
+      provider: 'alphavantage',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    await setCachedData('historical', cacheKey, historical, 'historical');
+    return { ok: true, data: historical };
+  } catch (error) {
+    console.error('[AlphaVantage] Crypto historical fetch error:', error);
+    const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+    if (stale) return { ok: true, data: stale.data };
+    return { ok: false, reason: 'Network error fetching crypto historical data', error };
   }
 }
 

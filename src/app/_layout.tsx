@@ -12,8 +12,10 @@ import { initializeSubscriptionSync } from '@/lib/revenuecatClient';
 import { usePremiumStore, syncLegacyStore } from '@/lib/premium-store';
 import { usePortfolioStore } from '@/lib/store';
 import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { BiometricGate } from '@/components/BiometricGate';
+import { useOnboardingStore } from '@/lib/onboarding-store';
+import { useLegalStore } from '@/lib/legal-store';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -39,7 +41,10 @@ function RootLayoutNav() {
   const syncFromCustomerInfo = usePremiumStore((s) => s.syncFromCustomerInfo);
   const setLegacyPremium = usePortfolioStore((s) => s.setPremium);
   const router = useRouter();
+  const segments = useSegments();
   const { isDark, theme } = useTheme();
+  const hasCompletedOnboarding = useOnboardingStore((s) => s.hasCompletedOnboarding);
+  const hasAcceptedDisclaimer = useLegalStore((s) => s.hasAcceptedDisclaimer);
 
   useEffect(() => {
     // Clear corrupted market data cache on startup (one-time fix)
@@ -98,6 +103,19 @@ function RootLayoutNav() {
       sub.remove();
     };
   }, [router]);
+
+  useEffect(() => {
+    const current = segments.join('/');
+    const onOnboarding = segments[0] === 'onboarding';
+    const onDisclaimer = segments[0] === 'disclaimer';
+
+    if (!hasCompletedOnboarding) return;
+    if (hasAcceptedDisclaimer) return;
+    if (onDisclaimer || onOnboarding) return;
+    if (current.length === 0) return;
+
+    router.replace('/disclaimer');
+  }, [hasAcceptedDisclaimer, hasCompletedOnboarding, router, segments]);
 
   const navigationTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),

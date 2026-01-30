@@ -11,6 +11,23 @@ function isListedAsset(category: AssetCategory, ticker?: string): boolean {
   return LISTED_CATEGORIES.includes(category) && !!ticker?.trim();
 }
 
+function inferListedAssetCountry(params: { category: AssetCategory; ticker?: string }): CountryCode | undefined {
+  // For listed assets, country should not default to onboarding country. It should be derived from the listing.
+  // MVP rule:
+  // - Crypto: treat as GLOBAL.
+  // - Stocks/Funds: default to US unless the ticker includes a known suffix (e.g., AAPL.US, SU.CA).
+  const { category, ticker } = params;
+  const symbol = ticker?.trim().toUpperCase();
+  if (!symbol) return undefined;
+
+  if (category === 'crypto') return 'GLOBAL';
+
+  const suffix = symbol.includes('.') ? symbol.split('.').pop() : null;
+  if (suffix && suffix in COUNTRY_INFO) return suffix as CountryCode;
+
+  return 'US';
+}
+
 // Helper: Convert legacy asset (without transactions) into transaction array
 // This ensures backward compatibility with existing assets
 function toTxnFromLegacy(asset: Asset): AssetTransaction[] {
@@ -85,6 +102,9 @@ export const usePortfolioStore = create<PortfolioState>()(
       addAsset: (assetData) => {
         // Normalize ticker to uppercase for consistent matching
         const ticker = assetData.ticker?.trim().toUpperCase();
+        const inferredCountry = isListedAsset(assetData.category, ticker)
+          ? inferListedAssetCountry({ category: assetData.category, ticker })
+          : undefined;
 
         // Check if this is a listed asset (stocks, funds, crypto with ticker)
         if (isListedAsset(assetData.category, ticker)) {
@@ -126,7 +146,8 @@ export const usePortfolioStore = create<PortfolioState>()(
                       lastUpdated: new Date().toISOString(),
                       // Preserve other fields that might have been updated
                       sector: assetData.sector ?? asset.sector,
-                      country: assetData.country ?? asset.country,
+                      // Always infer for listed assets to avoid onboarding defaults skewing geo analytics.
+                      country: inferredCountry ?? asset.country,
                       platform: assetData.platform ?? asset.platform,
                       notes: assetData.notes ?? asset.notes,
                     }
@@ -152,6 +173,8 @@ export const usePortfolioStore = create<PortfolioState>()(
             id: Date.now().toString(),
             lastUpdated: new Date().toISOString(),
             transactions: [newTxn],
+            country: inferredCountry ?? assetData.country,
+            countryName: inferredCountry ? undefined : assetData.countryName,
           };
           set((state) => ({ assets: [...state.assets, newAsset] }));
         } else {
@@ -178,7 +201,21 @@ export const usePortfolioStore = create<PortfolioState>()(
         set((state) => ({
           assets: state.assets.map((asset) =>
             asset.id === id
-              ? { ...asset, ...updates, lastUpdated: new Date().toISOString() }
+              ? (() => {
+                  const merged = { ...asset, ...updates };
+                  const normalizedTicker = merged.ticker?.trim().toUpperCase();
+                  const inferredCountry = isListedAsset(merged.category, normalizedTicker)
+                    ? inferListedAssetCountry({ category: merged.category, ticker: normalizedTicker })
+                    : undefined;
+
+                  return {
+                    ...merged,
+                    ticker: normalizedTicker,
+                    country: inferredCountry ?? merged.country,
+                    countryName: inferredCountry ? undefined : merged.countryName,
+                    lastUpdated: new Date().toISOString(),
+                  };
+                })()
               : asset
           ),
         }));

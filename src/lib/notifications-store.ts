@@ -1,3 +1,7 @@
+/**
+ * Local notifications/event timeline store (preferences + generated events).
+ * Generated events are periodically re-synced from app state (assets, room targets, autopilot).
+ */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -5,9 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Event types for the timeline
 export type EventType =
   | 'maturity'           // Bond/fixed income maturity
+  | 'amortization_milestone' // Fixed income amortization milestone
   | 'dividend'           // Expected dividend
   | 'price_alert'        // Price target reached
   | 'contribution_reminder' // Room contribution reminder
+  | 'stale_valuation'    // Manual asset valuation is stale
   | 'rebalance';         // Portfolio rebalance suggestion
 
 export interface PortfolioEvent {
@@ -27,10 +33,16 @@ export interface PortfolioEvent {
 export interface NotificationPreferences {
   enabled: boolean;
   maturityAlerts: boolean;
+  // Legacy single-value preference (kept for backward compatibility)
   maturityDaysBefore: number; // Days before maturity to notify
+  // Cadence-based reminders (e.g. 90/30/7)
+  maturityDaysBeforeList: number[];
+  amortizationAlerts: boolean;
   priceAlerts: boolean;
   dividendAlerts: boolean;
   contributionReminders: boolean;
+  staleValuationReminders: boolean;
+  staleValuationDays: number;
   weeklyDigest: boolean;
 }
 
@@ -68,9 +80,13 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   enabled: true,
   maturityAlerts: true,
   maturityDaysBefore: 30,
+  maturityDaysBeforeList: [90, 30, 7],
+  amortizationAlerts: true,
   priceAlerts: true,
   dividendAlerts: true,
   contributionReminders: true,
+  staleValuationReminders: false,
+  staleValuationDays: 30,
   weeklyDigest: false,
 };
 
@@ -104,7 +120,16 @@ export const useNotificationsStore = create<NotificationsState>()(
       },
 
       syncGeneratedEvents: (generated) => {
-        const generatedPrefixes = ['maturity_', 'contrib_', 'assetcontrib_', 'rebalance_'];
+        // IDs with these prefixes are regenerated from app state and should be replaced on each sync.
+        const generatedPrefixes = [
+          'maturity_',
+          'contrib_',
+          'assetcontrib_',
+          'autopilot_',
+          'rebalance_',
+          'stalevaluation_',
+          'amortization_',
+        ];
         const isGenerated = (id: string) => generatedPrefixes.some((p) => id.startsWith(p));
 
         const now = Date.now();
@@ -213,6 +238,12 @@ export const EVENT_TYPE_INFO: Record<EventType, {
     color: '#F59E0B',
     bgColor: '#F59E0B20',
   },
+  amortization_milestone: {
+    label: 'Amortization',
+    icon: 'RefreshCw',
+    color: '#A855F7',
+    bgColor: '#A855F720',
+  },
   dividend: {
     label: 'Dividend',
     icon: 'DollarSign',
@@ -230,6 +261,12 @@ export const EVENT_TYPE_INFO: Record<EventType, {
     icon: 'PiggyBank',
     color: '#EC4899',
     bgColor: '#EC489920',
+  },
+  stale_valuation: {
+    label: 'Update Value',
+    icon: 'RefreshCw',
+    color: '#F97316',
+    bgColor: '#F9731620',
   },
   rebalance: {
     label: 'Rebalance',

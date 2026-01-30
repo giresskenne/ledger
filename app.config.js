@@ -18,7 +18,7 @@ module.exports = () => {
     splash: {
       image: './public/appicon/ledger_splashicon.png',
       resizeMode: 'contain',
-      backgroundColor: '#0A0A0F',
+      backgroundColor: '#100648',
     },
     ios: {
       ...(base.ios ?? {}),
@@ -55,7 +55,7 @@ module.exports = () => {
       icon: './public/appicon/playstore.png',
       adaptiveIcon: {
         foregroundImage: './public/appicon/playstore.png',
-        backgroundColor: '#0A0A0F',
+        backgroundColor: '#100648',
       },
     },
   };

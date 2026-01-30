@@ -90,6 +90,12 @@ function getStooqSymbol(ticker: string, country?: string): string {
   // If ticker already has a suffix, use as-is
   if (ticker.includes('.')) return ticker.toUpperCase();
 
+  // Allow “raw” symbols (fx/commodities) without suffix, e.g. XAUUSD, EURUSD, BTCUSD.
+  // Stooq uses these without a country suffix.
+  if (/^[A-Z]{3,6}[A-Z]{3}$/.test(ticker.toUpperCase())) {
+    return ticker.toLowerCase();
+  }
+
   // Add country suffix if provided
   const suffix = country ? STOOQ_SUFFIXES[country] || '' : '.US';
   return `${ticker.toUpperCase()}${suffix}`;
@@ -275,6 +281,139 @@ export async function fetchStooqHistorical(
       reason: 'Network error fetching historical data',
       error,
     };
+  }
+}
+
+/**
+ * Fetch a quote for a “raw” Stooq symbol (fx/commodities), e.g. xauusd or eurusd.
+ * This bypasses country suffix logic.
+ */
+export async function fetchStooqRawQuote(
+  rawSymbol: string
+): Promise<MarketDataResult<PriceData>> {
+  const symbol = rawSymbol.toLowerCase();
+  const cacheKey = `RAW_${symbol}`;
+
+  const cached = await getCachedData<PriceData>('quote', cacheKey);
+  if (cached) {
+    return { ok: true, data: cached };
+  }
+
+  if (isWeb) {
+    const stale = await getStaleCachedData<PriceData>('quote', cacheKey);
+    if (stale) {
+      return { ok: true, data: { ...stale.data, status: 'stale' } };
+    }
+    return { ok: false, reason: 'Stooq API not available on web (CORS). Use mobile app for live prices.' };
+  }
+
+  try {
+    const url = `${STOOQ_BASE_URL}?s=${symbol}&f=d2ohlcv&h&e=csv`;
+    const response = await rateLimitedFetch(url);
+
+    if (!response.ok) {
+      const stale = await getStaleCachedData<PriceData>('quote', cacheKey);
+      if (stale) {
+        return { ok: true, data: { ...stale.data, status: 'stale' } };
+      }
+      return { ok: false, reason: `HTTP ${response.status}` };
+    }
+
+    const csv = await response.text();
+    if (csv.includes('No data') || csv.trim().split('\n').length < 2) {
+      const stale = await getStaleCachedData<PriceData>('quote', cacheKey);
+      if (stale) {
+        return { ok: true, data: { ...stale.data, status: 'stale' } };
+      }
+      return { ok: false, reason: 'No data available for this symbol' };
+    }
+
+    const prices = parseStooqCSV(csv);
+    if (prices.length === 0) return { ok: false, reason: 'Could not parse price data' };
+
+    const latest = prices[0];
+    const previous = prices[1];
+
+    const priceData: PriceData = {
+      symbol: rawSymbol.toUpperCase(),
+      price: latest.close,
+      previousClose: previous?.close,
+      change: previous ? latest.close - previous.close : undefined,
+      changePercent: previous ? ((latest.close - previous.close) / previous.close) * 100 : undefined,
+      volume: latest.volume,
+      timestamp: new Date().toISOString(),
+      provider: 'stooq',
+      status: 'fresh',
+      currency: 'USD',
+    };
+
+    await setCachedData('quote', cacheKey, priceData, 'quote');
+    return { ok: true, data: priceData };
+  } catch (error) {
+    console.error('[Stooq] Raw quote fetch error:', error);
+    const stale = await getStaleCachedData<PriceData>('quote', cacheKey);
+    if (stale) {
+      return { ok: true, data: { ...stale.data, status: 'stale' } };
+    }
+    return { ok: false, reason: 'Network error fetching symbol', error };
+  }
+}
+
+export async function fetchStooqRawHistorical(
+  rawSymbol: string,
+  days: number = 365
+): Promise<MarketDataResult<HistoricalData>> {
+  const symbol = rawSymbol.toLowerCase();
+  const cacheKey = `RAW_${symbol}_${days}`;
+
+  const cached = await getCachedData<HistoricalData>('historical', cacheKey);
+  if (cached) return { ok: true, data: cached };
+
+  if (isWeb) {
+    const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+    if (stale) {
+      return { ok: true, data: stale.data };
+    }
+    return { ok: false, reason: 'Stooq API not available on web (CORS)' };
+  }
+
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const formatDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const url = `${STOOQ_BASE_URL}?s=${symbol}&d1=${formatDate(startDate)}&d2=${formatDate(endDate)}&f=d2ohlcv&h&e=csv`;
+    const response = await rateLimitedFetch(url);
+
+    if (!response.ok) {
+      const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+      if (stale) return { ok: true, data: stale.data };
+      return { ok: false, reason: `HTTP ${response.status}` };
+    }
+
+    const csv = await response.text();
+    const prices = parseStooqCSV(csv);
+    if (prices.length === 0) {
+      const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+      if (stale) return { ok: true, data: stale.data };
+      return { ok: false, reason: 'No historical data available' };
+    }
+
+    const historicalData: HistoricalData = {
+      symbol: rawSymbol.toUpperCase(),
+      prices: prices.slice().reverse(),
+      provider: 'stooq',
+      lastUpdated: new Date().toISOString(),
+    };
+
+    await setCachedData('historical', cacheKey, historicalData, 'historical');
+    return { ok: true, data: historicalData };
+  } catch (error) {
+    console.error('[Stooq] Raw historical fetch error:', error);
+    const stale = await getStaleCachedData<HistoricalData>('historical', cacheKey);
+    if (stale) return { ok: true, data: stale.data };
+    return { ok: false, reason: 'Network error fetching historical data', error };
   }
 }
 

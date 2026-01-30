@@ -1,9 +1,15 @@
+/**
+ * Dashboard tab: portfolio overview, key insights, and quick links (including registered accounts).
+ * Keeps UI resilient across account types, including those without a standard contribution cap (e.g., 529).
+ */
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { TrendingUp, TrendingDown, ChevronRight, Sparkles, Bell, Eye, EyeOff, AlertTriangle, Globe, PieChart, Shield, Calendar, PiggyBank, RefreshCw, DollarSign } from 'lucide-react-native';
+import { PolarChart, Pie } from 'victory-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { usePortfolioStore } from '@/lib/store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
@@ -16,12 +22,16 @@ import { AssetLimitBanner, PremiumPaywall } from '@/components/PremiumPaywall';
 import { useNotificationsStore } from '@/lib/notifications-store';
 import { useSyncGeneratedEvents } from '@/lib/events';
 import { useTheme } from '@/lib/theme-store';
+import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
+import { usePortfolioFXRates } from '@/lib/portfolio-fx';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
   const [hideBalance, setHideBalance] = React.useState(false);
+  const hidePerformanceMetrics = useUIPreferencesStore((s) => s.hidePerformanceMetrics);
   const [isReady, setIsReady] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   useSyncGeneratedEvents();
@@ -54,6 +64,7 @@ export default function DashboardScreen() {
   // Select primitive values and arrays directly from store
   const assets = usePortfolioStore((s) => s.assets);
   const events = useNotificationsStore((s) => s.events);
+  const fx = usePortfolioFXRates(assets, selectedCurrency);
 
   // Use unified entitlement status
   const { isPremium } = useEntitlementStatus();
@@ -73,22 +84,22 @@ export default function DashboardScreen() {
 
   // Compute derived values with useMemo
   const summary = React.useMemo(() => {
-    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
-    const totalInvested = assets.reduce((sum, asset) => sum + asset.purchasePrice * asset.quantity, 0);
+    const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
+    const totalInvested = assets.reduce((sum, asset) => sum + fx.convert(asset.purchasePrice * asset.quantity, asset.currency), 0);
     const totalGain = totalValue - totalInvested;
     const totalGainPercent = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
     const dayChange = totalValue * 0.0085;
     const dayChangePercent = 0.85;
 
     return { totalValue, totalInvested, totalGain, totalGainPercent, dayChange, dayChangePercent };
-  }, [assets]);
+  }, [assets, fx]);
 
   const allocation = React.useMemo(() => {
-    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
+    const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
     const categoryTotals: Record<string, number> = {};
 
     assets.forEach((asset) => {
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       categoryTotals[asset.category] = (categoryTotals[asset.category] || 0) + value;
     });
 
@@ -100,7 +111,7 @@ export default function DashboardScreen() {
         color: CATEGORY_INFO[category as keyof typeof CATEGORY_INFO]?.color || '#6B7280',
       }))
       .sort((a, b) => b.value - a.value);
-  }, [assets]);
+  }, [assets, fx]);
 
   const topPerformers = React.useMemo(() => {
     return [...assets]
@@ -131,12 +142,12 @@ export default function DashboardScreen() {
 
   // Geographic allocation
   const countryAllocation = React.useMemo(() => {
-    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
+    const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
     const countryTotals: Record<string, number> = {};
 
     assets.forEach((asset) => {
       const country = asset.country || 'OTHER';
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       countryTotals[country] = (countryTotals[country] || 0) + value;
     });
 
@@ -152,16 +163,16 @@ export default function DashboardScreen() {
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-  }, [assets]);
+  }, [assets, fx]);
 
   // Sector allocation
   const sectorAllocation = React.useMemo(() => {
-    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
+    const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
     const sectorTotals: Record<string, number> = {};
 
     assets.forEach((asset) => {
       const sector = asset.sector || 'other';
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       sectorTotals[sector] = (sectorTotals[sector] || 0) + value;
     });
 
@@ -176,7 +187,7 @@ export default function DashboardScreen() {
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-  }, [assets]);
+  }, [assets, fx]);
 
   // Concentration warnings
   const concentrationWarnings = React.useMemo(() => {
@@ -211,6 +222,9 @@ export default function DashboardScreen() {
 
   const isPositive = summary.totalGain >= 0;
   const isDayPositive = summary.dayChange >= 0;
+  const horizontalPadding = 20;
+  const carouselGap = 12;
+  const cardWidth = Math.max(280, screenWidth - horizontalPadding * 2 - carouselGap);
 
   // Show loading while checking onboarding
   if (!isReady) {
@@ -291,45 +305,52 @@ export default function DashboardScreen() {
                 Total Portfolio Value
               </Text>
               <Text style={{ color: theme.text }} className="text-4xl font-bold">
-                {hideBalance ? '••••••' : formatCurrency(summary.totalValue)}
+                {hideBalance ? '••••••' : formatCurrency(summary.totalValue, selectedCurrency)}
               </Text>
+              {!hideBalance && fx.hasAnyConversions && fx.missingCurrencies.length > 0 && (
+                <Text style={{ color: theme.textTertiary }} className="text-xs mt-1">
+                  FX rates unavailable for {fx.missingCurrencies.join(', ')} — totals may be approximate.
+                </Text>
+              )}
 
-              <View className="flex-row items-center mt-4 gap-4">
-                <View className="flex-row items-center">
-                  {isPositive ? (
-                    <TrendingUp size={16} color="#10B981" />
-                  ) : (
-                    <TrendingDown size={16} color="#EF4444" />
-                  )}
-                  <Text
-                    className="ml-1 font-semibold"
-                    style={{ color: getGainColor(summary.totalGain) }}
-                  >
-                    {hideBalance ? '••••' : formatCurrency(Math.abs(summary.totalGain))}
-                  </Text>
-                  <Text
-                    className="ml-1 text-sm"
-                    style={{ color: getGainColor(summary.totalGain) }}
-                  >
-                    ({formatPercent(summary.totalGainPercent)})
-                  </Text>
+              {!hidePerformanceMetrics && (
+                <View className="flex-row items-center mt-4 gap-4">
+                  <View className="flex-row items-center">
+                    {isPositive ? (
+                      <TrendingUp size={16} color="#10B981" />
+                    ) : (
+                      <TrendingDown size={16} color="#EF4444" />
+                    )}
+                    <Text
+                      className="ml-1 font-semibold"
+                      style={{ color: getGainColor(summary.totalGain) }}
+                    >
+                      {hideBalance ? '••••' : formatCurrency(Math.abs(summary.totalGain), selectedCurrency)}
+                    </Text>
+                    <Text
+                      className="ml-1 text-sm"
+                      style={{ color: getGainColor(summary.totalGain) }}
+                    >
+                      ({formatPercent(summary.totalGainPercent)})
+                    </Text>
+                  </View>
+
+                  <View className="h-4 w-px" style={{ backgroundColor: theme.border }} />
+
+                  <View className="flex-row items-center">
+                    <View
+                      className="w-2 h-2 rounded-full mr-2"
+                      style={{ backgroundColor: isDayPositive ? '#10B981' : '#EF4444' }}
+                    />
+                    <Text style={{ color: theme.textSecondary }} className="text-sm">
+                      Today:{' '}
+                    </Text>
+                    <Text style={{ color: getGainColor(summary.dayChange) }} className="text-sm font-medium">
+                      {formatPercent(summary.dayChangePercent)}
+                    </Text>
+                  </View>
                 </View>
-
-                <View className="h-4 w-px" style={{ backgroundColor: theme.border }} />
-
-                <View className="flex-row items-center">
-                  <View
-                    className="w-2 h-2 rounded-full mr-2"
-                    style={{ backgroundColor: isDayPositive ? '#10B981' : '#EF4444' }}
-                  />
-                  <Text style={{ color: theme.textSecondary }} className="text-sm">
-                    Today:{' '}
-                  </Text>
-                  <Text style={{ color: getGainColor(summary.dayChange) }} className="text-sm font-medium">
-                    {formatPercent(summary.dayChangePercent)}
-                  </Text>
-                </View>
-              </View>
+              )}
 
               {/* Mini allocation bar */}
               <View
@@ -357,7 +378,7 @@ export default function DashboardScreen() {
               Invested
             </Text>
             <Text style={{ color: theme.text }} className="text-lg font-semibold mt-1">
-              {hideBalance ? '••••' : formatCurrency(summary.totalInvested)}
+              {hideBalance ? '••••' : formatCurrency(summary.totalInvested, selectedCurrency)}
             </Text>
           </View>
           <View className="flex-1 rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
@@ -401,9 +422,9 @@ export default function DashboardScreen() {
                   <Sparkles size={20} color="white" />
                 </View>
                 <View className="flex-1 ml-3">
-                  <Text className="text-white font-bold">Unlock Risk Analysis</Text>
+                  <Text className="text-white font-bold">Unlock the Full Picture</Text>
                   <Text className="text-white/80 text-sm">
-                    Get AI-powered portfolio insights
+                    Spot concentration risk before it surprises you
                   </Text>
                 </View>
                 <ChevronRight size={20} color="white" />
@@ -420,36 +441,41 @@ export default function DashboardScreen() {
                 <AlertTriangle size={18} color="#F59E0B" />
                 <Text className="text-amber-400 font-semibold ml-2">Concentration Alert</Text>
               </View>
-              {concentrationWarnings.map((warning, index) => (
-                <View key={index} className={cn('flex-row items-center', index > 0 && 'mt-2')}>
-                  <View
-                    className="w-2 h-2 rounded-full mr-2"
-                    style={{ backgroundColor: warning.severity === 'high' ? '#EF4444' : '#F59E0B' }}
-                  />
+              {!isPremium ? (
+                <View className="flex-row items-center justify-between">
                   <Text style={{ color: theme.textSecondary }} className="text-sm flex-1">
-                    {warning.message}
+                    {concentrationWarnings.length} concentration alert{concentrationWarnings.length > 1 ? 's' : ''} — your portfolio may be overexposed.
                   </Text>
-                  {isPremium ? (
+                  <Pressable
+                    onPress={() => {
+                      console.log('[Premium Debug] Upgrade button clicked:', {
+                        location: 'home-tab-concentration-warning',
+                        warningCount: concentrationWarnings.length,
+                        isPremium: false,
+                        timestamp: new Date().toISOString(),
+                      });
+                      router.push('/premium');
+                    }}
+                  >
+                    <Text className="text-amber-400 text-xs">Reveal the breakdown</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                concentrationWarnings.map((warning, index) => (
+                  <View key={index} className={cn('flex-row items-center', index > 0 && 'mt-2')}>
+                    <View
+                      className="w-2 h-2 rounded-full mr-2"
+                      style={{ backgroundColor: warning.severity === 'high' ? '#F59E0B' : '#A855F7' }}
+                    />
+                    <Text style={{ color: theme.textSecondary }} className="text-sm flex-1">
+                      {warning.message}
+                    </Text>
                     <Pressable onPress={() => router.push('/(tabs)/analysis')}>
                       <Text className="text-indigo-400 text-xs">View details</Text>
                     </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={() => {
-                        console.log('[Premium Debug] Upgrade button clicked:', {
-                          location: 'home-tab-concentration-warning',
-                          warningMessage: warning.message,
-                          isPremium: false,
-                          timestamp: new Date().toISOString(),
-                        });
-                        router.push('/premium');
-                      }}
-                    >
-                      <Text className="text-amber-400 text-xs">Upgrade</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
+                  </View>
+                ))
+              )}
             </View>
           </View>
         )}
@@ -472,7 +498,17 @@ export default function DashboardScreen() {
 
           <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
             {countryAllocation.map((item, index) => (
-              <View key={item.code} className={cn('', index > 0 && 'mt-4')}>
+              <Pressable
+                key={item.code}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: '/(tabs)/holdings',
+                    params: { country: item.code },
+                  } as any);
+                }}
+                className={cn('', index > 0 && 'mt-4')}
+              >
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-row items-center">
                     <Text className="text-lg mr-2">{item.flag}</Text>
@@ -497,126 +533,232 @@ export default function DashboardScreen() {
                     }}
                   />
                 </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Sector Allocation */}
-        <View className="px-5 mt-8">
-          <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center">
-              <PieChart size={18} color="#6366F1" />
-              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
-                Sector Allocation
-              </Text>
-            </View>
-            {isPremium && (
-              <Pressable onPress={() => router.push('/(tabs)/analysis')}>
-                <Text className="text-indigo-400 text-sm">Details</Text>
               </Pressable>
-            )}
-          </View>
-
-          <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
-            {sectorAllocation.map((item, index) => (
-              <View key={item.code} className={cn('flex-row items-center', index > 0 && 'mt-4')}>
-                <View
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <Text style={{ color: theme.text }} className="flex-1 ml-3">
-                  {item.name}
-                </Text>
-                {item.isHighRisk && (
-                  <AlertTriangle size={12} color="#EF4444" style={{ marginRight: 8 }} />
-                )}
-                <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
-                  {item.percentage.toFixed(1)}%
-                </Text>
-              </View>
             ))}
           </View>
         </View>
 
-        {/* Allocation Breakdown */}
-        <View className="px-5 mt-8">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text style={{ color: theme.text }} className="text-lg font-semibold">
-              Asset Allocation
-            </Text>
-            <Pressable onPress={() => router.push('/(tabs)/holdings')}>
-              <Text className="text-indigo-400 text-sm">See all</Text>
-            </Pressable>
-          </View>
-
-          <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
-            {allocation.slice(0, 5).map((item, index) => (
-              <View
-                key={item.category}
-                className={cn('flex-row items-center', index > 0 && 'mt-4')}
-              >
-                <View
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <Text style={{ color: theme.text }} className="flex-1 ml-3">
-                  {CATEGORY_INFO[item.category as keyof typeof CATEGORY_INFO]?.label || item.category}
+        {/* Allocation Cards Carousel */}
+        <View className="mt-8">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={cardWidth + carouselGap}
+            snapToAlignment="start"
+            contentContainerStyle={{
+              paddingHorizontal: horizontalPadding,
+              paddingRight: horizontalPadding + carouselGap,
+            }}
+            style={{ flexGrow: 0 }}
+          >
+            {/* Asset Allocation (first) */}
+            <View style={{ width: cardWidth, marginRight: carouselGap }}>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text style={{ color: theme.text }} className="text-lg font-semibold">
+                  Asset Allocation
                 </Text>
-                <Text style={{ color: theme.textSecondary }} className="mr-3">
-                  {hideBalance ? '••••' : formatCurrency(item.value)}
-                </Text>
-                <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
-                  {item.percentage.toFixed(1)}%
-                </Text>
+                <Pressable onPress={() => router.push('/(tabs)/holdings')}>
+                  <Text className="text-indigo-400 text-sm">See all</Text>
+                </Pressable>
               </View>
-            ))}
-          </View>
+
+              <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+                {allocation.length > 0 && (
+                  <Animated.View entering={FadeInDown.delay(140)} className="items-center mb-4">
+                    <View style={{ width: 180, height: 180 }}>
+                      <PolarChart
+                        data={allocation.slice(0, 8).map((a) => ({
+                          label: CATEGORY_INFO[a.category as keyof typeof CATEGORY_INFO]?.label ?? a.category,
+                          value: a.value,
+                          color: a.color,
+                        }))}
+                        labelKey="label"
+                        valueKey="value"
+                        colorKey="color"
+                      >
+                        <Pie.Chart innerRadius={60} size={180} />
+                      </PolarChart>
+                    </View>
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-2">
+                      Tap a row below to filter holdings.
+                    </Text>
+                  </Animated.View>
+                )}
+                {allocation.slice(0, 5).map((item, index) => (
+                  <Pressable
+                    key={item.category}
+                    className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({
+                        pathname: '/(tabs)/holdings',
+                        params: { category: item.category },
+                      } as any);
+                    }}
+                  >
+                    <View className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                      {CATEGORY_INFO[item.category as keyof typeof CATEGORY_INFO]?.label || item.category}
+                    </Text>
+                <Text style={{ color: theme.textSecondary }} className="mr-3">
+                  {hideBalance ? '••••' : formatCurrency(item.value, selectedCurrency)}
+                </Text>
+                    <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
+                      {item.percentage.toFixed(1)}%
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Sector Allocation (second) */}
+            <View style={{ width: cardWidth }}>
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center">
+                  <PieChart size={18} color="#6366F1" />
+                  <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                    Sector Allocation
+                  </Text>
+                </View>
+                {isPremium && (
+                  <Pressable onPress={() => router.push('/(tabs)/analysis')}>
+                    <Text className="text-indigo-400 text-sm">Details</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+                {/* Simple treemap-style mosaic (tap to drill down) */}
+                {sectorAllocation.length > 0 && (
+                  <Animated.View entering={FadeInDown.delay(120)} className="mb-4">
+                    <View className="flex-row overflow-hidden rounded-2xl" style={{ height: 110 }}>
+                      {[sectorAllocation[0], sectorAllocation[1], sectorAllocation[2]]
+                        .filter(Boolean)
+                        .map((item, idx, arr) => (
+                          <Pressable
+                            key={`mosaic-top-${item.code}`}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              router.push({
+                                pathname: '/(tabs)/holdings',
+                                params: { sector: item.code },
+                              } as any);
+                            }}
+                            style={{ flex: Math.max(1, item.percentage) }}
+                            className={cn('rounded-2xl overflow-hidden', idx < arr.length - 1 && 'mr-2')}
+                          >
+                            <View style={{ backgroundColor: item.color }} className="flex-1 p-3 justify-end">
+                              <Text className="text-white font-bold text-sm" numberOfLines={1}>
+                                {item.name}
+                              </Text>
+                              <Text className="text-white/80 text-xs">{item.percentage.toFixed(0)}%</Text>
+                            </View>
+                          </Pressable>
+                        ))}
+                    </View>
+                    <View className="flex-row overflow-hidden rounded-2xl mt-2" style={{ height: 80 }}>
+                      {[sectorAllocation[3], sectorAllocation[4], sectorAllocation[5]]
+                        .filter(Boolean)
+                        .map((item, idx, arr) => (
+                          <Pressable
+                            key={`mosaic-bottom-${item.code}`}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              router.push({
+                                pathname: '/(tabs)/holdings',
+                                params: { sector: item.code },
+                              } as any);
+                            }}
+                            style={{ flex: Math.max(1, item.percentage) }}
+                            className={cn('rounded-2xl overflow-hidden', idx < arr.length - 1 && 'mr-2')}
+                          >
+                            <View style={{ backgroundColor: item.color }} className="flex-1 p-3 justify-end">
+                              <Text className="text-white font-bold text-xs" numberOfLines={1}>
+                                {item.name}
+                              </Text>
+                              <Text className="text-white/80 text-[10px]">{item.percentage.toFixed(0)}%</Text>
+                            </View>
+                          </Pressable>
+                        ))}
+                    </View>
+                  </Animated.View>
+                )}
+
+                {sectorAllocation.map((item, index) => (
+                  <Pressable
+                    key={item.code}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({
+                        pathname: '/(tabs)/holdings',
+                        params: { sector: item.code },
+                      } as any);
+                    }}
+                    className={cn('flex-row items-center', index > 0 && 'mt-4')}
+                  >
+                    <View className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                      {item.name}
+                    </Text>
+                    {item.isHighRisk && (
+                      <AlertTriangle size={12} color="#EF4444" style={{ marginRight: 8 }} />
+                    )}
+                    <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
+                      {item.percentage.toFixed(1)}%
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
         </View>
 
         {/* Top Performers */}
-        <View className="px-5 mt-8">
-          <Text style={{ color: theme.text }} className="text-lg font-semibold mb-4">
-            Top Performers
-          </Text>
+        {!hidePerformanceMetrics && (
+          <View className="px-5 mt-8">
+            <Text style={{ color: theme.text }} className="text-lg font-semibold mb-4">
+              Top Performers
+            </Text>
 
-          {topPerformers.map((asset, index) => (
-            <Pressable
-              key={asset.id}
-              onPress={() => router.push(`/asset/${asset.id}`)}
-              className={cn(
-                'rounded-2xl p-4 flex-row items-center',
-                index > 0 && 'mt-3'
-              )}
-              style={{ backgroundColor: theme.surface }}
-            >
-              <View
-                className="w-12 h-12 rounded-full items-center justify-center"
-                style={{ backgroundColor: CATEGORY_INFO[asset.category].color + '20' }}
+            {topPerformers.map((asset, index) => (
+              <Pressable
+                key={asset.id}
+                onPress={() => router.push(`/asset/${asset.id}`)}
+                className={cn(
+                  'rounded-2xl p-4 flex-row items-center',
+                  index > 0 && 'mt-3'
+                )}
+                style={{ backgroundColor: theme.surface }}
               >
-                <Text className="text-lg font-bold" style={{ color: CATEGORY_INFO[asset.category].color }}>
-                  {asset.ticker?.[0] || asset.name[0]}
-                </Text>
-              </View>
-              <View className="flex-1 ml-3">
-                <Text style={{ color: theme.text }} className="font-medium">
-                  {asset.name}
-                </Text>
-                <Text style={{ color: theme.textSecondary }} className="text-sm">
-                  {asset.ticker || CATEGORY_INFO[asset.category].label}
-                </Text>
-              </View>
-              <View className="items-end">
-                <Text style={{ color: theme.text }} className="font-medium">
-                  {hideBalance ? '••••' : formatCurrency(asset.currentPrice * asset.quantity)}
-                </Text>
-                <Text style={{ color: getGainColor(asset.gainPercent) }} className="text-sm">
-                  {formatPercent(asset.gainPercent)}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
+                <View
+                  className="w-12 h-12 rounded-full items-center justify-center"
+                  style={{ backgroundColor: CATEGORY_INFO[asset.category].color + '20' }}
+                >
+                  <Text className="text-lg font-bold" style={{ color: CATEGORY_INFO[asset.category].color }}>
+                    {asset.ticker?.[0] || asset.name[0]}
+                  </Text>
+                </View>
+                <View className="flex-1 ml-3">
+                  <Text style={{ color: theme.text }} className="font-medium">
+                    {asset.name}
+                  </Text>
+                  <Text style={{ color: theme.textSecondary }} className="text-sm">
+                    {asset.ticker || CATEGORY_INFO[asset.category].label}
+                  </Text>
+                </View>
+                <View className="items-end">
+                  <Text style={{ color: theme.text }} className="font-medium">
+                    {hideBalance ? '••••' : formatCurrency(asset.currentPrice * asset.quantity)}
+                  </Text>
+                  <Text style={{ color: getGainColor(asset.gainPercent) }} className="text-sm">
+                    {formatPercent(asset.gainPercent)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View className="px-5 mt-8">
@@ -685,8 +827,13 @@ export default function DashboardScreen() {
                     accountType,
                     jurisdictionProfile?.birthDate
                   );
-                  const contributed = limit - remaining;
-                  const progress = limit > 0 ? Math.min((contributed / limit) * 100, 100) : 0;
+                  const hasStandardCap = Number.isFinite(limit) && limit > 0 && Number.isFinite(remaining);
+                  const contributed = hasStandardCap ? limit - remaining : 0;
+                  const progress = hasStandardCap ? Math.min((contributed / limit) * 100, 100) : 0;
+                  const safeProgress = Number.isFinite(progress) ? progress : 0;
+                  const remainingLabel = Number.isFinite(remaining)
+                    ? formatCurrency(remaining, selectedCurrency)
+                    : 'No cap';
 
                   return (
                     <View key={accountType}>
@@ -695,7 +842,8 @@ export default function DashboardScreen() {
                           {config.shortName}
                         </Text>
                         <Text className="text-emerald-400 text-xs font-medium">
-                          {formatCurrency(remaining, selectedCurrency)} left
+                          {remainingLabel}
+                          {Number.isFinite(remaining) ? ' left' : ''}
                         </Text>
                       </View>
                       <View
@@ -704,7 +852,7 @@ export default function DashboardScreen() {
                       >
                         <View
                           className="h-full bg-emerald-500 rounded-full"
-                          style={{ width: `${progress}%` }}
+                          style={{ width: `${safeProgress}%` }}
                         />
                       </View>
                     </View>

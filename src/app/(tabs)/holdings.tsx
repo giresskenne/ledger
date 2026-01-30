@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Search,
   Plus,
@@ -24,13 +24,14 @@ import * as Haptics from 'expo-haptics';
 import { usePortfolioStore } from '@/lib/store';
 import { FREE_TIER_LIMITS, useEntitlementStatus } from '@/lib/premium-store';
 import { formatCurrency, formatPercent, getGainColor } from '@/lib/formatters';
-import { CATEGORY_INFO, AssetCategory, Asset } from '@/lib/types';
+import { CATEGORY_INFO, AssetCategory, Asset, CountryCode, Sector } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { AssetLimitBanner, PremiumPaywall } from '@/components/PremiumPaywall';
 import { usePriceDisplay } from '@/lib/market-data/hooks';
 import { StatusIndicator } from '@/components/DataAttribution';
 import { NoAssetsEmptyState, NoSearchResultsEmptyState } from '@/components/EmptyState';
 import { useTheme } from '@/lib/theme-store';
+import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
 
 const CATEGORY_ICONS: Record<AssetCategory, React.ReactNode> = {
   stocks: <TrendingUp size={18} color="#10B981" />,
@@ -47,14 +48,34 @@ const CATEGORY_ICONS: Record<AssetCategory, React.ReactNode> = {
 
 type SortOption = 'value' | 'gain' | 'name' | 'category';
 type FilterOption = AssetCategory | 'all';
+type CountryFilter = CountryCode | 'all';
+type SectorFilter = Sector | 'all';
+
+function isAssetCategory(value: string | undefined): value is AssetCategory {
+  if (!value) return false;
+  return (Object.keys(CATEGORY_INFO) as AssetCategory[]).includes(value as AssetCategory);
+}
 
 export default function HoldingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme } = useTheme();
+  const { category, country, sector } = useLocalSearchParams<{
+    category?: string;
+    country?: string;
+    sector?: string;
+  }>();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortOption>('value');
-  const [filterCategory, setFilterCategory] = React.useState<FilterOption>('all');
+  const [filterCategory, setFilterCategory] = React.useState<FilterOption>(
+    isAssetCategory(category) ? category : 'all'
+  );
+  const [filterCountry, setFilterCountry] = React.useState<CountryFilter>(
+    typeof country === 'string' ? (country as CountryFilter) : 'all'
+  );
+  const [filterSector, setFilterSector] = React.useState<SectorFilter>(
+    typeof sector === 'string' ? (sector as SectorFilter) : 'all'
+  );
   const [showFilters, setShowFilters] = React.useState(false);
   const [showPaywall, setShowPaywall] = React.useState(false);
 
@@ -92,6 +113,16 @@ export default function HoldingsScreen() {
       result = result.filter((a) => a.category === filterCategory);
     }
 
+    // Filter by country
+    if (filterCountry !== 'all') {
+      result = result.filter((a) => (a.country ?? 'OTHER') === filterCountry);
+    }
+
+    // Filter by sector
+    if (filterSector !== 'all') {
+      result = result.filter((a) => (a.sector ?? 'other') === filterSector);
+    }
+
     // Sort
     result.sort((a, b) => {
       const aValue = a.currentPrice * a.quantity;
@@ -114,7 +145,7 @@ export default function HoldingsScreen() {
     });
 
     return result;
-  }, [assets, searchQuery, sortBy, filterCategory]);
+  }, [assets, searchQuery, sortBy, filterCategory, filterCountry, filterSector]);
 
   const categories: FilterOption[] = ['all', ...Object.keys(CATEGORY_INFO) as AssetCategory[]];
 
@@ -233,6 +264,45 @@ export default function HoldingsScreen() {
           </Text>
         </Animated.View>
 
+        {/* Active filters */}
+        {(filterCategory !== 'all' || filterCountry !== 'all' || filterSector !== 'all') && (
+          <Animated.View entering={FadeInDown.delay(320)} className="flex-row flex-wrap mb-4">
+            {filterCategory !== 'all' && (
+              <Pressable
+                onPress={() => setFilterCategory('all')}
+                className="px-3 py-2 rounded-full mr-2 mb-2"
+                style={{ backgroundColor: theme.surfaceHover }}
+              >
+                <Text style={{ color: theme.text }} className="text-sm font-semibold">
+                  Category: {CATEGORY_INFO[filterCategory].label} ✕
+                </Text>
+              </Pressable>
+            )}
+            {filterCountry !== 'all' && (
+              <Pressable
+                onPress={() => setFilterCountry('all')}
+                className="px-3 py-2 rounded-full mr-2 mb-2"
+                style={{ backgroundColor: theme.surfaceHover }}
+              >
+                <Text style={{ color: theme.text }} className="text-sm font-semibold">
+                  Country: {filterCountry} ✕
+                </Text>
+              </Pressable>
+            )}
+            {filterSector !== 'all' && (
+              <Pressable
+                onPress={() => setFilterSector('all')}
+                className="px-3 py-2 rounded-full mr-2 mb-2"
+                style={{ backgroundColor: theme.surfaceHover }}
+              >
+                <Text style={{ color: theme.text }} className="text-sm font-semibold">
+                  Sector: {filterSector} ✕
+                </Text>
+              </Pressable>
+            )}
+          </Animated.View>
+        )}
+
         {/* Asset List */}
         {filteredAssets.map((asset, index) => (
           <AssetCard key={asset.id} asset={asset} index={index} />
@@ -279,6 +349,7 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
   const router = useRouter();
   const updateAsset = usePortfolioStore((s) => s.updateAsset);
   const { theme } = useTheme();
+  const hidePerformanceMetrics = useUIPreferencesStore((s) => s.hidePerformanceMetrics);
 
   // Fetch live price data
   const priceData = usePriceDisplay(asset);
@@ -354,16 +425,18 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
             <Text style={{ color: theme.text }} className="font-semibold">
               {formatCurrency(value)}
             </Text>
-            <View className="flex-row items-center mt-1">
-              {isPositive ? (
-                <TrendingUp size={12} color="#10B981" />
-              ) : (
-                <TrendingDown size={12} color="#EF4444" />
-              )}
-              <Text className="text-sm ml-1" style={{ color: getGainColor(gain) }}>
-                {formatPercent(gainPercent)}
-              </Text>
-            </View>
+            {!hidePerformanceMetrics && (
+              <View className="flex-row items-center mt-1">
+                {isPositive ? (
+                  <TrendingUp size={12} color="#10B981" />
+                ) : (
+                  <TrendingDown size={12} color="#EF4444" />
+                )}
+                <Text className="text-sm ml-1" style={{ color: getGainColor(gain) }}>
+                  {formatPercent(gainPercent)}
+                </Text>
+              </View>
+            )}
           </View>
 
           <ChevronRight size={16} color={theme.textTertiary} style={{ marginLeft: 8 }} />
@@ -398,14 +471,16 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
               {formatCurrency(currentPrice)}
             </Text>
           </View>
-          <View className="flex-1 items-end">
-            <Text style={{ color: theme.textTertiary }} className="text-xs">
-              P&L
-            </Text>
-            <Text className="text-sm" style={{ color: getGainColor(gain) }}>
-              {formatCurrency(gain)}
-            </Text>
-          </View>
+          {!hidePerformanceMetrics && (
+            <View className="flex-1 items-end">
+              <Text style={{ color: theme.textTertiary }} className="text-xs">
+                P&L
+              </Text>
+              <Text className="text-sm" style={{ color: getGainColor(gain) }}>
+                {formatCurrency(gain)}
+              </Text>
+            </View>
+          )}
         </View>
       </Pressable>
     </Animated.View>

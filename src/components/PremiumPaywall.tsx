@@ -19,7 +19,7 @@ interface PremiumPaywallProps {
 const FEATURE_MESSAGES = {
   asset_limit: {
     title: 'Asset Limit Reached',
-    description: `You've reached the ${FREE_TIER_LIMITS.maxAssets} asset limit on the free plan. Upgrade to Premium for unlimited asset tracking.`,
+    description: `You've hit the free plan's ${FREE_TIER_LIMITS.maxAssets}-asset limit. Unlock Premium to keep tracking everything in one place.`,
     icon: Lock,
   },
   analysis: {
@@ -254,11 +254,11 @@ export function AssetLimitBanner({
                 : `${remaining} asset${remaining === 1 ? '' : 's'} remaining`}
             </Text>
             <Text className="text-gray-500 text-xs mt-0.5">
-              {isAtLimit ? 'Upgrade to add more' : 'Upgrade for unlimited'}
+              {isAtLimit ? 'Unlock unlimited tracking' : 'Unlock unlimited tracking'}
             </Text>
           </View>
           <Text className={`font-medium ${isAtLimit ? 'text-red-400' : 'text-amber-400'}`}>
-            Upgrade
+            Unlock Premium
           </Text>
         </LinearGradient>
       </Pressable>

@@ -1,3 +1,7 @@
+/**
+ * Onboarding flow: collects country, tracking intent, optional registered accounts, and preferences.
+ * Handles account types that don't have a single standard cap (e.g., US 529) without breaking the UI.
+ */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -2127,7 +2131,8 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
       // Get total contributed and calculate progress
       const totalContributed = getTotalContributed(accountType, taxYearId);
       const annualLimit = getEffectiveAnnualLimit(accountType, jurisdictionProfile.birthDate);
-      const progressPercent = annualLimit > 0 ? Math.min(100, (totalContributed / annualLimit) * 100) : 0;
+      const hasStandardCap = Number.isFinite(annualLimit) && annualLimit > 0 && Number.isFinite(remainingRoom);
+      const progressPercent = hasStandardCap ? Math.min(100, (totalContributed / annualLimit) * 100) : 0;
 
       const perPeriodTarget = savingsTarget?.perPeriodTarget || 0;
       const periodsLeft = savingsTarget?.periodsLeft || 0;
@@ -2139,6 +2144,7 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         perPeriodTarget,
         periodsLeft,
         progressPercent,
+        hasStandardCap,
       };
     }).filter(Boolean);
   }, [selectedRegisteredAccounts, selectedCountry, jurisdictionProfile, getRemainingRoom, getSavingsTarget, getTotalContributed]);
@@ -2178,10 +2184,23 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
           </Text>
         </Animated.View>
 
+        {accountsData.some((d: any) => d && d.hasStandardCap === false) && (
+          <Animated.View entering={FadeInDown.delay(160)} style={{ paddingHorizontal: 24, marginTop: 16 }}>
+            <View style={{ backgroundColor: 'rgba(99, 102, 241, 0.12)', borderRadius: 16, padding: 14 }}>
+              <Text style={{ color: '#C7D2FE', fontSize: 13, lineHeight: 18, textAlign: 'center' }}>
+                Some accounts don’t have a single standard contribution cap (for example, a 529 plan).
+                You can still track contributions, and set a personal limit later to get a save-to-max target.
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
         <View style={styles.roomRevealList}>
           {accountsData.map((data, index) => {
             if (!data) return null;
-            const { config, remainingRoom, perPeriodTarget, periodsLeft, progressPercent } = data;
+            const { config, remainingRoom, perPeriodTarget, periodsLeft, progressPercent, hasStandardCap } = data as any;
+            const safeProgress = Number.isFinite(progressPercent) ? progressPercent : 0;
+            const hasTarget = Number.isFinite(perPeriodTarget) && perPeriodTarget > 0;
 
             return (
               <Animated.View key={config.type} entering={FadeInDown.delay(200 + index * 100)}>
@@ -2197,16 +2216,23 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                     <View style={styles.roomRevealStat}>
                       <Text style={styles.roomRevealStatLabel}>Remaining Room</Text>
                       <Text style={styles.roomRevealStatValue}>
-                        {selectedCountry ? getCurrencySymbol(selectedCountry as JurisdictionCode) : '$'}
-                        {remainingRoom.toLocaleString()}
+                        {hasStandardCap
+                          ? `${selectedCountry ? getCurrencySymbol(selectedCountry as JurisdictionCode) : '$'}${Number(remainingRoom).toLocaleString()}`
+                          : 'No cap'}
                       </Text>
                     </View>
                     <View style={styles.roomRevealStatDivider} />
                     <View style={styles.roomRevealStat}>
                       <Text style={styles.roomRevealStatLabel}>Save per {frequencyLabel}</Text>
-                      <Text style={[styles.roomRevealStatValue, { color: '#10B981' }]}>
-                        {selectedCountry ? getCurrencySymbol(selectedCountry as JurisdictionCode) : '$'}
-                        {Math.ceil(perPeriodTarget).toLocaleString()}
+                      <Text
+                        style={[
+                          styles.roomRevealStatValue,
+                          { color: hasTarget ? '#10B981' : '#9CA3AF' },
+                        ]}
+                      >
+                        {hasTarget
+                          ? `${selectedCountry ? getCurrencySymbol(selectedCountry as JurisdictionCode) : '$'}${Math.ceil(perPeriodTarget).toLocaleString()}`
+                          : '—'}
                       </Text>
                     </View>
                   </View>
@@ -2216,12 +2242,12 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                       <View
                         style={[
                           styles.roomRevealProgressFill,
-                          { width: `${progressPercent}%`, backgroundColor: config.color },
+                          { width: `${safeProgress}%`, backgroundColor: config.color },
                         ]}
                       />
                     </View>
                     <Text style={styles.roomRevealProgressText}>
-                      {periodsLeft} {frequencyLabel}s left
+                      {hasTarget ? `${periodsLeft} ${frequencyLabel}s left` : 'Set a personal limit to see targets'}
                     </Text>
                   </View>
                 </View>
