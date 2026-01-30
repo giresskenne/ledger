@@ -20,6 +20,11 @@
   Include ALL required properties when creating objects — TypeScript strict mode is enabled.
 </typescript>
 
+<documentation>
+  For every file you create or meaningfully modify: add a short file header comment at the very top (1–3 lines) describing what the file does and why it exists.
+  Comment all new logic you write (at least at the function/block level): explain intent and any non-obvious decisions; avoid redundant “what the code already says” comments.
+</documentation>
+
 <environment>
   You are in Vibecode. The system manages git and the dev server (port 8081).
   DO NOT: manage git, touch the dev server, or check its state.

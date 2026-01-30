@@ -271,8 +271,8 @@ export default function SettingsScreen() {
                   <Sparkles size={20} color="white" />
                 </View>
                 <View className="flex-1 ml-3">
-                  <Text className="text-white font-bold">Upgrade to Premium</Text>
-                  <Text className="text-white/80 text-sm">Unlock risk analysis & more</Text>
+                  <Text className="text-white font-bold">Unlock Premium</Text>
+                  <Text className="text-white/80 text-sm">Feel confident seeing the full picture</Text>
                 </View>
                 <ChevronRight size={20} color="white" />
               </LinearGradient>
@@ -610,6 +610,32 @@ export default function SettingsScreen() {
                     </View>
                   </View>
                 )}
+
+                {/* Amortization milestone alerts */}
+                <View
+                  className="flex-row items-center p-4 pl-6 border-b"
+                  style={{ borderBottomColor: theme.borderLight }}
+                >
+                  <View className="w-8 h-8 rounded-full bg-purple-500/10 items-center justify-center">
+                    <RefreshCw size={16} color="#A855F7" />
+                  </View>
+                  <View className="flex-1 ml-3">
+                    <Text style={{ color: theme.text }} className="text-sm">
+                      Amortization Milestones
+                    </Text>
+                    <Text style={{ color: theme.textTertiary }} className="text-xs mt-0.5">
+                      Estimated principal milestones for fixed income
+                    </Text>
+                  </View>
+                  <Switch
+                    value={preferences.amortizationAlerts}
+                    onValueChange={(value) =>
+                      handleToggleNotification('amortizationAlerts', value)
+                    }
+                    trackColor={{ false: isDark ? '#374151' : '#D1D5DB', true: theme.primary }}
+                    thumbColor="white"
+                  />
+                </View>
 
                 {/* Price Alerts */}
                 <View

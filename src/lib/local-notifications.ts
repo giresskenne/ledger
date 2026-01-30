@@ -36,6 +36,8 @@ function shouldNotifyForEvent(event: PortfolioEvent, prefs: NotificationPreferen
   switch (event.type) {
     case 'maturity':
       return prefs.maturityAlerts;
+    case 'amortization_milestone':
+      return prefs.amortizationAlerts;
     case 'dividend':
       return prefs.dividendAlerts;
     case 'price_alert':
@@ -151,6 +153,7 @@ export function useScheduleLocalNotifications(): void {
       maturityAlerts: prefs.maturityAlerts,
       maturityDaysBefore: prefs.maturityDaysBefore,
       maturityDaysBeforeList: prefs.maturityDaysBeforeList,
+      amortizationAlerts: prefs.amortizationAlerts,
       priceAlerts: prefs.priceAlerts,
       dividendAlerts: prefs.dividendAlerts,
       contributionReminders: prefs.contributionReminders,

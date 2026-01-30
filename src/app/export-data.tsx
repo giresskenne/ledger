@@ -125,9 +125,9 @@ export default function ExportDataScreen() {
                     <Lock size={24} color="white" />
                   </View>
                   <View className="flex-1 ml-3">
-                    <Text className="text-white font-bold">Premium Feature</Text>
+                    <Text className="text-white font-bold">Be ready for tax time</Text>
                     <Text className="text-white/80 text-sm">
-                      Upgrade to export your portfolio data
+                      Export CSV/PDF with Premium
                     </Text>
                   </View>
                   <Sparkles size={20} color="white" />

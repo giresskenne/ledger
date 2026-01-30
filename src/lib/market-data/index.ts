@@ -9,11 +9,14 @@ import type {
 import {
   fetchStooqQuote,
   fetchStooqHistorical,
+  fetchStooqRawQuote,
+  fetchStooqRawHistorical,
   STOOQ_SUPPORTED_COUNTRIES,
 } from './stooq-client';
 import {
   fetchFXRate,
   fetchCryptoQuote,
+  fetchCryptoHistorical,
   fetchStockQuote as fetchAlphaVantageStockQuote,
   isAlphaVantageConfigured,
   getAlphaVantageRemainingCalls,
@@ -84,6 +87,24 @@ export async function searchTicker(
         reason: 'Unable to find price data for this ticker',
       };
 
+    case 'stooq_raw':
+      if (ticker) {
+        const result = await fetchStooqRawQuote(ticker);
+        if (result.ok) {
+          return {
+            ok: true,
+            data: {
+              ticker: ticker.toUpperCase(),
+              name: ticker.toUpperCase(),
+              category,
+              currentPrice: result.data.price,
+              currency: (result.data.currency as Currency) || currency,
+            },
+          };
+        }
+      }
+      return { ok: false, reason: 'Unable to find price data for this symbol' };
+
     case 'alphavantage_crypto':
       if (ticker) {
         const result = await fetchCryptoQuote(ticker, currency);
@@ -118,7 +139,12 @@ export async function searchTicker(
 // Asset Category to Provider Mapping
 // ============================================
 
-type ProviderStrategy = 'stooq' | 'alphavantage_fx' | 'alphavantage_crypto' | 'manual';
+type ProviderStrategy =
+  | 'stooq'
+  | 'stooq_raw'
+  | 'alphavantage_fx'
+  | 'alphavantage_crypto'
+  | 'manual';
 
 function getProviderForCategory(category: AssetCategory): ProviderStrategy {
   switch (category) {
@@ -127,11 +153,13 @@ function getProviderForCategory(category: AssetCategory): ProviderStrategy {
       return 'stooq';
     case 'crypto':
       return 'alphavantage_crypto';
+    // Spot symbols (e.g. XAUUSD / XAGUSD) can be fetched from Stooq without suffix
+    case 'gold':
+    case 'physical_metals':
+      return 'stooq_raw';
     // These need manual entry or specialized APIs
     case 'bonds':
     case 'fixed_income':
-    case 'gold':
-    case 'physical_metals':
     case 'real_estate':
     case 'derivatives':
     case 'cash':
@@ -161,6 +189,13 @@ export async function fetchAssetPrice(
         }
       }
       // Fallback to manual
+      return createManualPriceData(asset);
+
+    case 'stooq_raw':
+      if (asset.ticker) {
+        const result = await fetchStooqRawQuote(asset.ticker);
+        if (result.ok) return result;
+      }
       return createManualPriceData(asset);
 
     case 'alphavantage_crypto':
@@ -206,6 +241,16 @@ export async function fetchAssetHistorical(
 
   if (strategy === 'stooq' && asset.ticker) {
     const result = await fetchStooqHistorical(asset.ticker, asset.country, days);
+    if (result.ok) return result;
+  }
+
+  if (strategy === 'stooq_raw' && asset.ticker) {
+    const result = await fetchStooqRawHistorical(asset.ticker, days);
+    if (result.ok) return result;
+  }
+
+  if (strategy === 'alphavantage_crypto' && asset.ticker) {
+    const result = await fetchCryptoHistorical(asset.ticker, asset.currency, days);
     if (result.ok) return result;
   }
 

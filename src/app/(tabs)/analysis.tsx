@@ -3,6 +3,8 @@ import { View, Text, ScrollView, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useMutation } from '@tanstack/react-query';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   Shield,
   AlertTriangle,
@@ -16,10 +18,13 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { usePortfolioStore } from '@/lib/store';
+import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useEntitlementStatus } from '@/lib/premium-store';
 import { CATEGORY_INFO, SECTOR_INFO, COUNTRY_INFO, Sector, CountryCode } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { useTheme } from '@/lib/theme-store';
+import { usePortfolioFXRates } from '@/lib/portfolio-fx';
+import { generatePortfolioAISnapshot, isOpenAIConfigured, type PortfolioAISnapshot } from '@/lib/openai';
 
 function LockedAnalysisScreen() {
   const insets = useSafeAreaInsets();
@@ -58,14 +63,14 @@ function LockedAnalysisScreen() {
               Unlock Portfolio Analysis
             </Text>
             <Text style={{ color: theme.textSecondary }} className="text-center mt-3 px-8 leading-6">
-              Get AI-powered insights to optimize your portfolio, identify risks, and discover diversification opportunities.
+              See what’s driving your risk — so you can feel confident about what you own.
             </Text>
           </View>
 
           {/* Features Preview */}
           <View className="mt-10">
             <FeaturePreview
-              icon={<Shield size={24} color="#10B981" />}
+              icon={<Shield size={24} color="#6366F1" />}
               title="Risk Score Analysis"
               description="Understand your portfolio's overall risk level"
             />
@@ -81,8 +86,8 @@ function LockedAnalysisScreen() {
             />
             <FeaturePreview
               icon={<Lightbulb size={24} color="#F59E0B" />}
-              title="Smart Suggestions"
-              description="Personalized recommendations to improve returns"
+              title="Insight Cards"
+              description="Understand exposures without investment advice"
             />
           </View>
 
@@ -111,7 +116,7 @@ function LockedAnalysisScreen() {
                 }}
               >
                 <Sparkles size={20} color="white" />
-                <Text className="text-white font-bold text-lg ml-2">Upgrade to Premium</Text>
+                <Text className="text-white font-bold text-lg ml-2">Unlock Premium</Text>
               </LinearGradient>
             </Pressable>
 
@@ -156,16 +161,19 @@ function LockedAnalysisScreen() {
 function PremiumAnalysisScreen() {
   const insets = useSafeAreaInsets();
   const assets = usePortfolioStore((s) => s.assets);
+  const selectedCurrency = useOnboardingStore((s) => s.selectedCurrency);
   const { theme, isDark } = useTheme();
+  const fx = usePortfolioFXRates(assets, selectedCurrency);
+  const [aiSnapshot, setAiSnapshot] = React.useState<PortfolioAISnapshot | null>(null);
 
   // Compute risk analysis with useMemo using real asset data
   const riskAnalysis = React.useMemo(() => {
-    const totalValue = assets.reduce((sum, asset) => sum + asset.currentPrice * asset.quantity, 0);
+    const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
 
     // Category concentration
     const categoryConcentration: Record<string, number> = {};
     assets.forEach((asset) => {
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       const percentage = totalValue > 0 ? (value / totalValue) * 100 : 0;
       categoryConcentration[asset.category] = (categoryConcentration[asset.category] || 0) + percentage;
     });
@@ -182,7 +190,7 @@ function PremiumAnalysisScreen() {
     const sectorTotals: Record<string, number> = {};
     assets.forEach((asset) => {
       const sector = asset.sector || 'other';
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       sectorTotals[sector] = (sectorTotals[sector] || 0) + value;
     });
 
@@ -199,7 +207,7 @@ function PremiumAnalysisScreen() {
     const countryTotals: Record<string, number> = {};
     assets.forEach((asset) => {
       const country = asset.country || 'OTHER';
-      const value = asset.currentPrice * asset.quantity;
+      const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
       countryTotals[country] = (countryTotals[country] || 0) + value;
     });
 
@@ -218,12 +226,12 @@ function PremiumAnalysisScreen() {
 
     const topSector = sectorConcentration[0];
     if (topSector && topSector.percentage > 40) {
-      suggestions.push(`Your ${topSector.name.toLowerCase()} exposure is ${topSector.percentage.toFixed(0)}%. Consider diversifying into other sectors to reduce concentration risk.`);
+      suggestions.push(`${topSector.name} represents ${topSector.percentage.toFixed(0)}% of your portfolio. This concentration may increase exposure to sector-specific risks.`);
     }
 
     const topCountry = geographicConcentration[0];
     if (topCountry && topCountry.percentage > 60) {
-      suggestions.push(`${topCountry.percentage.toFixed(0)}% of your portfolio is in ${topCountry.name}. Adding international exposure could reduce geographic risk.`);
+      suggestions.push(`${topCountry.percentage.toFixed(0)}% of your portfolio is in ${topCountry.name}. This concentration may increase exposure to region-specific risks.`);
     }
 
     const stocksPercent = categoryConcentration['stocks'] || 0;
@@ -231,11 +239,11 @@ function PremiumAnalysisScreen() {
     const fixedIncomePercent = categoryConcentration['fixed_income'] || 0;
 
     if (stocksPercent > 50 && (bondsPercent + fixedIncomePercent) < 15) {
-      suggestions.push('Your equity allocation is high relative to fixed income. Adding bonds can reduce volatility during market downturns.');
+      suggestions.push('Your portfolio is equity-heavy relative to fixed income. This mix may be more sensitive to market moves.');
     }
 
     if (!categoryConcentration['gold'] && !categoryConcentration['physical_metals']) {
-      suggestions.push('Consider adding 5-10% allocation to gold or precious metals as an inflation hedge.');
+      suggestions.push('No precious metals are tracked. If you hold gold or similar assets elsewhere, adding them here can improve completeness of your allocation view.');
     }
 
     // Calculate overall risk score
@@ -251,12 +259,51 @@ function PremiumAnalysisScreen() {
       assetTypeConcentration,
       suggestions,
     };
-  }, [assets]);
+  }, [assets, fx]);
+
+  const portfolioTotalValue = React.useMemo(() => {
+    return assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
+  }, [assets, fx]);
+
+  const aiMutation = useMutation({
+    mutationFn: async () => {
+      const topCategories = riskAnalysis.assetTypeConcentration.slice(0, 4).map((c) => ({
+        name: c.name,
+        percentage: Number(c.percentage.toFixed(1)),
+      }));
+      const topSectors = riskAnalysis.sectorConcentration.slice(0, 4).map((s) => ({
+        name: s.name,
+        percentage: Number(s.percentage.toFixed(1)),
+      }));
+      const topCountries = riskAnalysis.geographicConcentration.slice(0, 4).map((c) => ({
+        name: c.name,
+        percentage: Number(c.percentage.toFixed(1)),
+      }));
+
+      const concentrationAlertsCount = [
+        ...riskAnalysis.sectorConcentration,
+        ...riskAnalysis.geographicConcentration,
+      ].filter((x) => x.riskLevel === 'high').length;
+
+      return generatePortfolioAISnapshot({
+        baseCurrency: selectedCurrency,
+        totalValue: portfolioTotalValue,
+        topCategories,
+        topSectors,
+        topCountries,
+        concentrationAlertsCount,
+      });
+    },
+    onSuccess: (result) => {
+      if (result.ok) setAiSnapshot(result.data);
+    },
+  });
 
   const getRiskColor = (score: number) => {
-    if (score <= 3) return '#10B981';
-    if (score <= 6) return '#F59E0B';
-    return '#EF4444';
+    // PRD: neutral indicators (avoid red/green). Use a calm palette.
+    if (score <= 3) return '#6366F1'; // indigo
+    if (score <= 6) return '#A855F7'; // purple
+    return '#F59E0B'; // amber
   };
 
   const getRiskLabel = (score: number) => {
@@ -266,9 +313,10 @@ function PremiumAnalysisScreen() {
   };
 
   const getRiskLevelColor = (level: 'low' | 'medium' | 'high') => {
-    if (level === 'low') return '#10B981';
-    if (level === 'medium') return '#F59E0B';
-    return '#EF4444';
+    // PRD: neutral indicators (avoid red/green).
+    if (level === 'low') return '#6366F1';
+    if (level === 'medium') return '#A855F7';
+    return '#F59E0B';
   };
 
   return (
@@ -354,6 +402,63 @@ function PremiumAnalysisScreen() {
             </LinearGradient>
           </View>
 
+          {/* AI Snapshot (optional) */}
+          <Animated.View entering={FadeInDown.delay(120)} className="mt-6">
+            <View className="flex-row items-center mb-4">
+              <Sparkles size={20} color="#F59E0B" />
+              <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
+                AI Snapshot
+              </Text>
+            </View>
+
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
+              {!isOpenAIConfigured() ? (
+                <Text style={{ color: theme.textSecondary }} className="leading-6">
+                  AI insights are optional and currently unavailable (OpenAI key not configured).
+                </Text>
+              ) : (
+                <>
+                  <Text style={{ color: theme.textSecondary }} className="leading-6">
+                    A quick, calm summary of what your portfolio looks like today — observations only, not advice.
+                  </Text>
+
+                  <Pressable
+                    onPress={() => aiMutation.mutate()}
+                    className="mt-4 rounded-xl py-3 items-center"
+                    style={{ backgroundColor: '#F59E0B20' }}
+                    disabled={aiMutation.isPending}
+                  >
+                    <Text className="text-amber-400 font-semibold">
+                      {aiMutation.isPending ? 'Generating…' : aiSnapshot ? 'Refresh snapshot' : 'Generate snapshot'}
+                    </Text>
+                  </Pressable>
+
+                  {aiMutation.data?.ok === false && (
+                    <Text className="text-gray-500 text-xs mt-3">
+                      {aiMutation.data.reason}
+                    </Text>
+                  )}
+
+                  {aiSnapshot && (
+                    <View className="mt-4">
+                      {aiSnapshot.bullets.map((b, idx) => (
+                        <View key={`${idx}-${b}`} className={cn('flex-row', idx > 0 && 'mt-3')}>
+                          <Text className="text-amber-400 mr-2">•</Text>
+                          <Text style={{ color: theme.textSecondary }} className="flex-1 leading-6">
+                            {b}
+                          </Text>
+                        </View>
+                      ))}
+                      <Text style={{ color: theme.textTertiary }} className="text-[11px] mt-4">
+                        Generated {new Date(aiSnapshot.generatedAt).toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          </Animated.View>
+
           {/* Sector Concentration */}
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
@@ -373,7 +478,7 @@ function PremiumAnalysisScreen() {
                     <View className="flex-row items-center">
                       <Text style={{ color: theme.text }}>{sector.name}</Text>
                       {sector.riskLevel === 'high' && (
-                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                        <AlertTriangle size={14} color="#F59E0B" style={{ marginLeft: 8 }} />
                       )}
                     </View>
                     <View
@@ -419,7 +524,7 @@ function PremiumAnalysisScreen() {
                     <View className="flex-row items-center">
                       <Text style={{ color: theme.text }}>{region.name}</Text>
                       {region.riskLevel === 'high' && (
-                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                        <AlertTriangle size={14} color="#F59E0B" style={{ marginLeft: 8 }} />
                       )}
                     </View>
                     <View
@@ -465,7 +570,7 @@ function PremiumAnalysisScreen() {
                     <View className="flex-row items-center">
                       <Text style={{ color: theme.text }}>{type.name}</Text>
                       {type.riskLevel === 'high' && (
-                        <AlertTriangle size={14} color="#EF4444" style={{ marginLeft: 8 }} />
+                        <AlertTriangle size={14} color="#F59E0B" style={{ marginLeft: 8 }} />
                       )}
                     </View>
                     <View
@@ -492,12 +597,12 @@ function PremiumAnalysisScreen() {
             </View>
           </View>
 
-          {/* Smart Suggestions */}
+          {/* Insights */}
           <View className="mt-8">
             <View className="flex-row items-center mb-4">
               <Lightbulb size={20} color="#F59E0B" />
               <Text style={{ color: theme.text }} className="text-lg font-semibold ml-2">
-                Smart Suggestions
+                Insights
               </Text>
             </View>
 
@@ -519,10 +624,10 @@ function PremiumAnalysisScreen() {
             ))}
 
             {riskAnalysis.suggestions.length === 0 && (
-              <View className="bg-emerald-500/10 rounded-2xl p-4 flex-row items-center">
-                <CheckCircle size={24} color="#10B981" />
-                <Text className="text-emerald-400 ml-3 flex-1">
-                  Your portfolio is well-diversified! Keep up the good work.
+              <View className="bg-indigo-500/10 rounded-2xl p-4 flex-row items-center">
+                <CheckCircle size={24} color="#6366F1" />
+                <Text className="text-indigo-400 ml-3 flex-1">
+                  No major concentration signals detected from your current tags.
                 </Text>
               </View>
             )}

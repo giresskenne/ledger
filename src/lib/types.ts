@@ -1,3 +1,7 @@
+/**
+ * Shared domain types and static config (assets, jurisdictions, and registered account definitions).
+ * `ACCOUNT_CONFIGS` is the single source of truth for what registered accounts exist and how they render.
+ */
 // Investment Types
 export type AssetCategory =
   | 'stocks'
@@ -127,6 +131,9 @@ export interface Asset {
   currentPrice: number;
   purchaseDate: string;
   currency: Currency;
+  // Optional registered-account tag (e.g., "this holding was bought inside a TFSA").
+  // `null`/`undefined` means "taxable / unregistered".
+  heldIn?: RegisteredAccountType | null;
   // Sector and country for analytics
   sector?: Sector;
   country?: CountryCode;
@@ -246,9 +253,9 @@ export const CATEGORY_INFO: Record<AssetCategory, { label: string; icon: string;
 
 export type JurisdictionCode = 'CA' | 'US' | 'UK';
 
-export type CanadianAccountType = 'TFSA' | 'RRSP' | 'FHSA';
-export type USAccountType = 'IRA' | '401K' | 'ROTH_IRA';
-export type UKAccountType = 'ISA' | 'LISA' | 'PENSION';
+export type CanadianAccountType = 'TFSA' | 'RRSP' | 'FHSA' | 'RESP';
+export type USAccountType = 'IRA' | '401K' | 'ROTH_IRA' | 'PLAN_529';
+export type UKAccountType = 'ISA' | 'LISA' | 'PENSION' | 'JISA';
 
 export type RegisteredAccountType = CanadianAccountType | USAccountType | UKAccountType;
 
@@ -400,6 +407,21 @@ export const ACCOUNT_CONFIGS: AccountTypeConfig[] = [
     taxYearType: 'calendar',
     sourceUrl: 'https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account.html',
   },
+  {
+    type: 'RESP',
+    name: 'Registered Education Savings Plan',
+    shortName: 'RESP',
+    description: 'Education savings plan (Canada). Contributions have a lifetime cap; grants may apply.',
+    jurisdiction: 'CA',
+    color: '#06B6D4',
+    icon: 'Gift',
+    // RESP contributions are primarily constrained by a lifetime cap per beneficiary. We model it as a lifetime cap
+    // (and use a matching "annual" cap to keep the existing room model working consistently for MVP).
+    annualLimit2026: 50000,
+    lifetimeLimit: 50000,
+    taxYearType: 'calendar',
+    sourceUrl: 'https://www.canada.ca/en/services/benefits/education/education-savings/resp.html',
+  },
   // United States
   {
     type: 'IRA',
@@ -445,6 +467,20 @@ export const ACCOUNT_CONFIGS: AccountTypeConfig[] = [
     taxYearType: 'calendar',
     sourceUrl: 'https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500',
   },
+  {
+    type: 'PLAN_529',
+    name: '529 College Savings Plan',
+    shortName: '529',
+    description: 'Education savings plan (US). Contribution limits vary by state and beneficiary.',
+    jurisdiction: 'US',
+    color: '#22C55E',
+    icon: 'Gift',
+    // There is no single federal annual contribution cap; plans set overall balance limits.
+    // For MVP, treat as "no standard cap" so users can track contributions, and optionally set a personal cap via Set Room.
+    annualLimit2026: Number.POSITIVE_INFINITY,
+    taxYearType: 'calendar',
+    sourceUrl: 'https://www.savingforcollege.com/article/how-much-can-you-contribute-to-a-529-plan',
+  },
   // United Kingdom
   {
     type: 'ISA',
@@ -481,5 +517,17 @@ export const ACCOUNT_CONFIGS: AccountTypeConfig[] = [
     annualLimit2026: 60000,
     taxYearType: 'uk_tax_year',
     sourceUrl: 'https://www.gov.uk/tax-on-your-private-pension/annual-allowance',
+  },
+  {
+    type: 'JISA',
+    name: 'Junior ISA',
+    shortName: 'Junior ISA',
+    description: 'Tax-free savings for a child (UK). Annual subscription limit.',
+    jurisdiction: 'UK',
+    color: '#A855F7',
+    icon: 'PiggyBank',
+    annualLimit2026: 9000,
+    taxYearType: 'uk_tax_year',
+    sourceUrl: 'https://www.gov.uk/junior-individual-savings-accounts',
   },
 ];

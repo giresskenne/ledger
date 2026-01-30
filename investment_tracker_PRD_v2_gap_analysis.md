@@ -60,7 +60,7 @@ Code snapshot: `analysis/prd-v2-gap-2026-01-28` @ `a3680f54f4b5821517c5c39e30d4e
 - [ ] **Local-first data architecture per PRD**:
   - PRD calls for SQLite/Realm. Current portfolio persistence is primarily Zustand + AsyncStorage (`src/lib/store.ts`).
   - Decide whether to (a) migrate to `expo-sqlite`/Realm, or (b) formally accept AsyncStorage for MVP and update PRD expectations.
-- [ ] **Authentication**:
+- [ ] **Authentication**: 
   - PRD “Period 1” includes authentication. Current app has onboarding + optional biometrics gate, but no user auth/account model.
   - Decide scope: “local-only auth” (biometrics/passcode) vs account sign-in.
 

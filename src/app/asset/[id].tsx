@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Alert, Dimensions, TextInput, Modal, Linking } from 'react-native';
+import { View, Text, ScrollView, Pressable, Alert, Dimensions, TextInput, Modal, Linking, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,10 +29,12 @@ import { formatCurrency, formatPercent, formatDate, getDaysUntilMaturity, getGai
 import { CATEGORY_INFO, SECTOR_INFO, COUNTRY_INFO, Sector, CountryCode } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import * as Haptics from 'expo-haptics';
-import { usePriceDisplay } from '@/lib/market-data/hooks';
+import { useAssetHistorical, usePriceDisplay } from '@/lib/market-data/hooks';
 import { StatusIndicator } from '@/components/DataAttribution';
 import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
 import { buildEstimatedAmortizationSchedule, isFixedIncomeAsset } from '@/lib/amortization';
+import { getMarketStatus } from '@/lib/market-hours';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -60,6 +62,30 @@ export default function AssetDetailScreen() {
 
   // Get live price data (pass null if asset not found - hook handles this)
   const priceData = usePriceDisplay(asset ?? null);
+  const showListedHistory =
+    !!asset &&
+    !asset.isManual &&
+    !!asset.ticker &&
+    (asset.category === 'stocks' ||
+      asset.category === 'funds' ||
+      asset.category === 'crypto' ||
+      asset.category === 'gold' ||
+      asset.category === 'physical_metals');
+
+  const listedHistoryDays = React.useMemo(() => {
+    if (!asset) return 365;
+    const now = Date.now();
+    if (perfRange === '1M') return 30;
+    if (perfRange === '6M') return 180;
+    if (perfRange === '1Y') return 365;
+    if (perfRange === 'ALL') return 365 * 5;
+    const purchase = new Date(asset.purchaseDate).getTime();
+    if (!Number.isFinite(purchase)) return 365 * 5;
+    const days = Math.ceil((now - purchase) / (1000 * 60 * 60 * 24));
+    return Math.max(30, Math.min(days, 365 * 10));
+  }, [asset, perfRange]);
+
+  const listedHistorical = useAssetHistorical(showListedHistory ? (asset ?? null) : null, listedHistoryDays);
 
   if (!asset) {
     return (
@@ -105,6 +131,19 @@ export default function AssetDetailScreen() {
 
     const startPricePerUnit = (() => {
       if (perfRange === 'INCEPTION') return asset.purchasePrice;
+      const listedPricesAsc = listedHistorical.data?.ok
+        ? listedHistorical.data.data.prices
+        : [];
+
+      // Prefer provider-backed historical prices for listed assets.
+      if (!asset.isManual && listedPricesAsc.length > 1) {
+        if (!cutoff) return listedPricesAsc[0].close;
+        const cutoffMs = cutoff.getTime();
+        const eligible = listedPricesAsc.filter((p) => new Date(p.date).getTime() <= cutoffMs);
+        if (eligible.length > 0) return eligible[eligible.length - 1].close;
+        return listedPricesAsc[0].close;
+      }
+
       if (historyAsc.length === 0) return asset.purchasePrice;
       if (!cutoff) return historyAsc[0].value;
 
@@ -126,7 +165,11 @@ export default function AssetDetailScreen() {
           ? 'All time'
           : perfRange;
 
-    const usesHistory = perfRange !== 'INCEPTION' && historyAsc.length > 1;
+    const usesHistory =
+      perfRange !== 'INCEPTION' &&
+      (!asset.isManual
+        ? (listedHistorical.data?.ok ? listedHistorical.data.data.prices.length > 1 : false)
+        : historyAsc.length > 1);
     const isManualContext = asset.isManual || priceData.provider === 'manual';
 
     return {
@@ -137,9 +180,31 @@ export default function AssetDetailScreen() {
       endPricePerUnit,
       usesHistory,
       isManualContext,
-      hasHistory: historyAsc.length > 1,
+      hasHistory: asset.isManual ? historyAsc.length > 1 : (listedHistorical.data?.ok ? listedHistorical.data.data.prices.length > 1 : false),
     };
-  }, [asset.currentPrice, asset.isManual, asset.purchaseDate, asset.purchasePrice, asset.quantity, asset.valueHistory, perfRange, priceData.provider]);
+  }, [asset.currentPrice, asset.isManual, asset.purchaseDate, asset.purchasePrice, asset.quantity, asset.valueHistory, perfRange, priceData.provider, listedHistorical.data]);
+
+  const listedChartPoints = React.useMemo(() => {
+    if (!showListedHistory) return [];
+    if (!listedHistorical.data?.ok) return [];
+    return listedHistorical.data.data.prices.map((p) => ({ date: p.date, value: p.close }));
+  }, [listedHistorical.data, showListedHistory]);
+
+  const marketStatus = React.useMemo(() => {
+    if (!showListedHistory) return null;
+    const country = asset.country || 'US';
+    return getMarketStatus(country);
+  }, [asset.country, showListedHistory]);
+
+  const updatedLabel = React.useMemo(() => {
+    try {
+      const ts = priceData.timestamp ? new Date(priceData.timestamp) : null;
+      if (!ts || Number.isNaN(ts.getTime())) return null;
+      return formatDistanceToNowStrict(ts, { addSuffix: true });
+    } catch {
+      return null;
+    }
+  }, [priceData.timestamp]);
 
   const schedule = React.useMemo(() => {
     if (!isFixedIncome) return null;
@@ -388,8 +453,23 @@ export default function AssetDetailScreen() {
               icon={<RefreshCw size={18} color="#9CA3AF" />}
               label="Last Updated"
               value={formatDate(asset.lastUpdated)}
-              isLast
+              isLast={!showListedHistory}
             />
+            {showListedHistory && (
+              <>
+                <DetailRow
+                  icon={<Globe size={18} color="#9CA3AF" />}
+                  label="Price Source"
+                  value={priceData.provider === 'manual' ? 'Manual' : priceData.provider === 'stooq' ? 'Stooq' : 'Alpha Vantage'}
+                />
+                <DetailRow
+                  icon={<Clock size={18} color="#9CA3AF" />}
+                  label="Quote Updated"
+                  value={updatedLabel ? updatedLabel : '—'}
+                  isLast
+                />
+              </>
+            )}
           </View>
         </Animated.View>
 
@@ -543,7 +623,9 @@ export default function AssetDetailScreen() {
                   : perfRange === 'INCEPTION'
                     ? 'Based on your stored purchase price and current price.'
                     : computedPerformance.hasHistory
-                      ? 'Based on your saved valuation history.'
+                      ? showListedHistory
+                        ? 'Based on market price history for this asset.'
+                        : 'Based on your saved valuation history.'
                       : 'No history available for this period yet.'}
               </Text>
 
@@ -569,9 +651,51 @@ export default function AssetDetailScreen() {
           </Animated.View>
         )}
 
+        {/* Listed Asset Price History */}
+        {!hidePerformanceMetrics && showListedHistory && (
+          <Animated.View entering={FadeInDown.delay(700)} className="px-5 mt-8">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-white text-lg font-semibold">Price History</Text>
+              {marketStatus && (
+                <View className={cn('px-3 py-1 rounded-full', marketStatus.isOpen ? 'bg-emerald-500/15' : 'bg-white/10')}>
+                  <Text className={cn('text-xs font-semibold', marketStatus.isOpen ? 'text-emerald-400' : 'text-gray-300')}>
+                    {marketStatus.statusLabel}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View className="bg-white/5 rounded-2xl p-4">
+              {listedHistorical.isLoading ? (
+                <View className="py-10 items-center justify-center">
+                  <ActivityIndicator color="#6366F1" />
+                  <Text className="text-gray-500 text-xs mt-3">Loading market history…</Text>
+                </View>
+              ) : listedHistorical.data?.ok && listedChartPoints.length > 1 ? (
+                <SimpleLineChart data={listedChartPoints} color={categoryInfo.color} currency={asset.currency} />
+              ) : (
+                <View>
+                  <Text className="text-gray-400 leading-6">
+                    Historical pricing isn’t available right now.
+                  </Text>
+                  <Text className="text-gray-500 text-xs mt-2">
+                    {listedHistorical.data?.ok === false ? listedHistorical.data.reason : 'Try again later.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {marketStatus?.detailLabel && (
+              <Text className="text-gray-500 text-xs mt-2">
+                {marketStatus.detailLabel}
+              </Text>
+            )}
+          </Animated.View>
+        )}
+
         {/* Value History Chart (for manual assets) */}
         {!hidePerformanceMetrics && asset.valueHistory && asset.valueHistory.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(700)} className="px-5 mt-8">
+          <Animated.View entering={FadeInDown.delay(720)} className="px-5 mt-8">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-white text-lg font-semibold">Value History</Text>
               <Pressable
@@ -586,7 +710,7 @@ export default function AssetDetailScreen() {
             </View>
             <View className="bg-white/5 rounded-2xl p-4">
               {asset.valueHistory.length > 1 ? (
-                <SimpleLineChart data={asset.valueHistory} color={categoryInfo.color} />
+                <SimpleLineChart data={asset.valueHistory} color={categoryInfo.color} currency={asset.currency} />
               ) : (
                 <View>
                   <Text className="text-gray-400">
@@ -641,18 +765,25 @@ export default function AssetDetailScreen() {
         <Animated.View entering={FadeInDown.delay(800)} className="px-5 mt-8">
           {/* Price Status */}
           {priceData && (
-            <View className="flex-row items-center justify-center mb-4">
-              <StatusIndicator
-                status={priceData.provider === 'manual' ? 'manual' : priceData.isFresh ? 'fresh' : 'stale'}
-              />
-              <Text className="text-gray-500 text-xs ml-2">
-                {priceData.provider === 'manual'
-                  ? 'Manual price entry'
-                  : priceData.isFresh
-                    ? `Live from ${priceData.provider}`
-                    : 'Cached price'
-                }
-              </Text>
+            <View className="items-center justify-center mb-4">
+              <View className="flex-row items-center">
+                <StatusIndicator
+                  status={priceData.provider === 'manual' ? 'manual' : priceData.isFresh ? 'fresh' : 'stale'}
+                />
+                <Text className="text-gray-500 text-xs ml-2">
+                  {priceData.provider === 'manual'
+                    ? 'Manual price entry'
+                    : priceData.isFresh
+                      ? `Live from ${priceData.provider}`
+                      : 'Cached price'}
+                  {updatedLabel ? ` • Updated ${updatedLabel}` : ''}
+                </Text>
+              </View>
+              {marketStatus && priceData.provider !== 'manual' && (
+                <Text className="text-gray-600 text-[11px] mt-1">
+                  {marketStatus.statusLabel} • {marketStatus.detailLabel}
+                </Text>
+              )}
             </View>
           )}
           <View className="flex-row gap-3">
@@ -667,7 +798,7 @@ export default function AssetDetailScreen() {
               className="flex-1 bg-white/10 rounded-2xl p-4 items-center flex-row justify-center"
             >
               <ExternalLink size={16} color="white" />
-              <Text className="text-white font-semibold ml-2">View Chart</Text>
+              <Text className="text-white font-semibold ml-2">Open chart</Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -931,9 +1062,11 @@ function DetailRow({
 function SimpleLineChart({
   data,
   color,
+  currency = 'USD',
 }: {
   data: { date: string; value: number }[];
   color: string;
+  currency?: string;
 }) {
   const chartWidth = SCREEN_WIDTH - 72; // Padding accounted for
   const chartHeight = 120;
@@ -963,7 +1096,7 @@ function SimpleLineChart({
         <View>
           <Text className="text-gray-400 text-xs">Current</Text>
           <Text className="text-white text-lg font-semibold">
-            {formatCurrency(lastValue)}
+            {formatCurrency(lastValue, currency)}
           </Text>
         </View>
         <View className="items-end">

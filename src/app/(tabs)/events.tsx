@@ -1,3 +1,7 @@
+/**
+ * Events tab: shows generated reminders (maturity, room contributions, autopilot confirmations, etc.).
+ * Also serves as the deep-link target for local notifications.
+ */
 import React from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,6 +45,8 @@ import { cn } from '@/lib/cn';
 import { useSyncGeneratedEvents } from '@/lib/events';
 import { formatCurrency } from '@/lib/formatters';
 import { useTheme } from '@/lib/theme-store';
+import { useRoomStore } from '@/lib/room-store';
+import type { PayFrequency, RegisteredAccountType } from '@/lib/types';
 
 const EventIcon = ({ type }: { type: EventType }) => {
   const info = EVENT_TYPE_INFO[type];
@@ -49,6 +55,8 @@ const EventIcon = ({ type }: { type: EventType }) => {
   switch (type) {
     case 'maturity':
       return <Calendar {...iconProps} />;
+    case 'amortization_milestone':
+      return <RefreshCw {...iconProps} />;
     case 'dividend':
       return <DollarSign {...iconProps} />;
     case 'price_alert':
@@ -63,6 +71,45 @@ const EventIcon = ({ type }: { type: EventType }) => {
       return <Bell {...iconProps} />;
   }
 };
+
+function parseAutopilotEventId(id: string): {
+  accountType: RegisteredAccountType;
+  frequency: PayFrequency;
+  occurrenceId: string;
+  kind: 'headsUp' | 'dayOf';
+} | null {
+  if (typeof id !== 'string' || !id.startsWith('autopilot_')) return null;
+  const parts = id.split('_');
+
+  // Format: autopilot_{accountType}_{frequency}_{occurrenceId}_{kind}
+  const freqIndex = parts.findIndex((p) => p === 'weekly' || p === 'biweekly' || p === 'monthly');
+  if (freqIndex < 0) return null;
+  if (freqIndex + 2 >= parts.length) return null;
+
+  const frequency = parts[freqIndex] as PayFrequency;
+  const occurrenceId = parts[freqIndex + 1] ?? '';
+  const kind = parts[freqIndex + 2] as 'headsUp' | 'dayOf';
+  if (kind !== 'headsUp' && kind !== 'dayOf') return null;
+
+  const accountType = parts.slice(1, freqIndex).join('_') as RegisteredAccountType;
+  if (!accountType || !occurrenceId) return null;
+
+  return { accountType, frequency, occurrenceId, kind };
+}
+
+function parseRoomContributionReminderEventId(id: string): {
+  accountType: RegisteredAccountType;
+  occurrenceId: string;
+} | null {
+  if (typeof id !== 'string' || !id.startsWith('contrib_')) return null;
+  const parts = id.split('_');
+  // contrib_{accountType}_{YYYY-MM-DD}
+  if (parts.length < 3) return null;
+  const occurrenceId = parts[parts.length - 1] ?? '';
+  const accountType = parts.slice(1, parts.length - 1).join('_') as RegisteredAccountType;
+  if (!accountType || !occurrenceId) return null;
+  return { accountType, occurrenceId };
+}
 
 function EventCard({
   event,
@@ -270,40 +317,114 @@ function EventDetailModal({
   onClose: () => void;
   onViewAsset?: () => void;
 }) {
-  if (!event) return null;
+  // Hooks must be unconditional; keep them at the top even when `event` is null.
   const { theme, isDark } = useTheme();
+  const confirmAutopilotOccurrence = useRoomStore((s) => s.confirmAutopilotOccurrence);
+  const confirmContributionReminderOccurrence = useRoomStore(
+    (s) => s.confirmContributionReminderOccurrence
+  );
+  const [autopilotError, setAutopilotError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    setAutopilotError(null);
+  }, [event?.id, visible]);
 
-  const info = EVENT_TYPE_INFO[event.type];
   const assets = usePortfolioStore((s) => s.assets);
   const applyAssetContribution = usePortfolioStore((s) => s.applyAssetContribution);
   const updateAsset = usePortfolioStore((s) => s.updateAsset);
   const asset = React.useMemo(() => {
-    if (!event.assetId) return undefined;
+    if (!event?.assetId) return undefined;
     return assets.find((a) => a.id === event.assetId);
-  }, [assets, event.assetId]);
+  }, [assets, event?.assetId]);
 
+  const autopilotInfo = React.useMemo(
+    () => (event?.id ? parseAutopilotEventId(event.id) : null),
+    [event?.id]
+  );
+  const canConfirmAutopilot = Boolean(autopilotInfo && autopilotInfo.kind === 'dayOf');
+
+  const roomContribInfo = React.useMemo(
+    () => (event?.id ? parseRoomContributionReminderEventId(event.id) : null),
+    [event?.id]
+  );
+  const canLogRoomContribution = Boolean(roomContribInfo);
+
+  const contributionOccurrenceId = React.useMemo(() => {
+    if (!event?.id || !event.id.startsWith('assetcontrib_')) return null;
+    const parts = event.id.split('_');
+    // assetcontrib_{assetId}_{frequency}_{occurrenceId}
+    return parts.length >= 4 ? parts.slice(3).join('_') : null;
+  }, [event?.id]);
+
+  const canMarkContributionDone =
+    Boolean(event?.id?.startsWith('assetcontrib_')) &&
+    !!asset?.recurringContribution?.enabled &&
+    typeof contributionOccurrenceId === 'string' &&
+    contributionOccurrenceId.length > 0;
+
+  const handleConfirmAutopilot = () => {
+    if (!autopilotInfo || autopilotInfo.kind !== 'dayOf') return;
+    const amount = Number(event?.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAutopilotError('Missing amount — please edit Autopilot settings.');
+      return;
+    }
+
+    const result = confirmAutopilotOccurrence({
+      accountType: autopilotInfo.accountType,
+      occurrenceId: autopilotInfo.occurrenceId,
+      amount,
+      date: new Date().toISOString(),
+    });
+
+    if (!result.ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setAutopilotError(result.reason || 'Could not log contribution');
+      return;
+    }
+
+    Haptics.notificationAsync(
+      result.wasCapped ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
+    );
+    onClose();
+  };
+
+  const handleLogRoomContribution = () => {
+    if (!roomContribInfo) return;
+    const amount = Number(event?.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAutopilotError('Missing amount — please check your room settings.');
+      return;
+    }
+
+    const result = confirmContributionReminderOccurrence({
+      accountType: roomContribInfo.accountType,
+      occurrenceId: roomContribInfo.occurrenceId,
+      amount,
+      date: new Date().toISOString(),
+    });
+
+    if (!result.ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setAutopilotError(result.reason || 'Could not log contribution');
+      return;
+    }
+
+    Haptics.notificationAsync(
+      result.wasCapped ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
+    );
+    onClose();
+  };
+
+  if (!event) return null;
+
+  const info = EVENT_TYPE_INFO[event.type];
   const eventDate = new Date(event.date);
   const now = new Date();
-  const daysUntil = Math.ceil(
-    (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   const isPast = daysUntil < 0;
 
   const isAssetContributionEvent =
     typeof event.id === 'string' && event.id.startsWith('assetcontrib_') && !!event.assetId;
-
-  const contributionOccurrenceId = React.useMemo(() => {
-    if (!isAssetContributionEvent) return null;
-    const parts = event.id.split('_');
-    // assetcontrib_{assetId}_{frequency}_{occurrenceId}
-    return parts.length >= 4 ? parts.slice(3).join('_') : null;
-  }, [event.id, isAssetContributionEvent]);
-
-  const canMarkContributionDone =
-    isAssetContributionEvent &&
-    !!asset?.recurringContribution?.enabled &&
-    typeof contributionOccurrenceId === 'string' &&
-    contributionOccurrenceId.length > 0;
 
   const getTimeLabel = () => {
     if (isPast) return 'Past due';
@@ -319,6 +440,14 @@ function EventDetailModal({
   };
 
   const getActionText = () => {
+    if (autopilotInfo) {
+      return autopilotInfo.kind === 'headsUp'
+        ? 'Before the debit: make sure your chequing account has enough cash available.'
+        : 'After the debit: tap “Confirm” to log it in Ledger (we’ll cap it if needed).';
+    }
+    if (roomContribInfo) {
+      return 'Tap “Mark as done” once you’ve made the contribution — we’ll log it now and update your remaining room.';
+    }
     if (isAssetContributionEvent) {
       return 'Tap "Mark as done" after your contribution is made (or to validate the auto-added update).';
     }
@@ -491,6 +620,32 @@ function EventDetailModal({
 
                 {/* Actions */}
                 <View className="mt-6 flex-row gap-3">
+                  {canConfirmAutopilot && (
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        setAutopilotError(null);
+                        handleConfirmAutopilot();
+                      }}
+                      className="flex-1 bg-indigo-500 rounded-xl py-3.5 flex-row items-center justify-center"
+                    >
+                      <Check size={18} color="white" />
+                      <Text className="text-white font-semibold ml-2">Confirm</Text>
+                    </Pressable>
+                  )}
+                  {canLogRoomContribution && !canConfirmAutopilot && (
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        setAutopilotError(null);
+                        handleLogRoomContribution();
+                      }}
+                      className="flex-1 bg-indigo-500 rounded-xl py-3.5 flex-row items-center justify-center"
+                    >
+                      <Check size={18} color="white" />
+                      <Text className="text-white font-semibold ml-2">Mark as done</Text>
+                    </Pressable>
+                  )}
                   {canMarkContributionDone && (
                     <Pressable
                       onPress={() => {
@@ -527,16 +682,21 @@ function EventDetailModal({
                     onPress={onClose}
                     className={cn(
                       'rounded-xl py-3.5 items-center justify-center',
-                      canMarkContributionDone ? 'px-4' : 'flex-1'
+                      canMarkContributionDone || canConfirmAutopilot || canLogRoomContribution ? 'px-4' : 'flex-1'
                     )}
                     style={{
                       backgroundColor:
-                        canMarkContributionDone || event.assetId ? theme.surfaceHover : theme.primary,
+                        canMarkContributionDone || canConfirmAutopilot || canLogRoomContribution || event.assetId
+                          ? theme.surfaceHover
+                          : theme.primary,
                     }}
                   >
                     <Text
                       style={{
-                        color: canMarkContributionDone || event.assetId ? theme.text : 'white',
+                        color:
+                          canMarkContributionDone || canConfirmAutopilot || canLogRoomContribution || event.assetId
+                            ? theme.text
+                            : 'white',
                       }}
                       className="font-semibold"
                     >
@@ -544,6 +704,14 @@ function EventDetailModal({
                     </Text>
                   </Pressable>
                 </View>
+
+                {autopilotError && (
+                  <View className="mt-3">
+                    <Text className="text-amber-300 text-sm text-center">
+                      {autopilotError}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </Animated.View>
@@ -626,6 +794,7 @@ export default function EventsScreen() {
   const filterOptions: { key: EventType | 'all'; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'maturity', label: 'Maturity' },
+    { key: 'amortization_milestone', label: 'Amortization' },
     { key: 'dividend', label: 'Dividends' },
     { key: 'contribution_reminder', label: 'Contributions' },
     { key: 'stale_valuation', label: 'Stale Values' },
@@ -960,10 +1129,10 @@ export default function EventsScreen() {
                   </View>
                   <View className="flex-1 ml-3">
                     <Text style={{ color: theme.text }} className="font-semibold">
-                      Unlock Price Alerts
+                      Stay Calm. Stay Notified.
                     </Text>
                     <Text style={{ color: theme.textSecondary }} className="text-sm mt-0.5">
-                      Get notified when assets hit your targets
+                      Gentle nudges when important moments are coming up
                     </Text>
                   </View>
                   <ChevronRight size={20} color="#6366F1" />

@@ -1,3 +1,7 @@
+/**
+ * Add Asset screen: creates a new holding and optionally configures recurring contributions.
+ * Country selection is only shown for manual categories where it can't be derived from a ticker.
+ */
 import React from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -198,19 +202,27 @@ export default function AddAssetScreen() {
   const isFixedIncome = category === 'fixed_income' || category === 'bonds';
   const isRealEstate = category === 'real_estate';
   const canSearchTicker = category === 'stocks' || category === 'funds' || category === 'crypto';
+  const isGlobalByDefault = category === 'gold' || category === 'physical_metals';
+  const shouldShowCountryField =
+    category === 'real_estate' ||
+    category === 'bonds' ||
+    category === 'fixed_income' ||
+    category === 'derivatives' ||
+    category === 'cash';
 
   const formCopy = React.useMemo(() => getCategoryFormCopy(category), [category]);
 
   // Keep country in sync with onboarding (only if user hasn't chosen yet).
   const hasManuallyPickedCountry = React.useRef(false);
   React.useEffect(() => {
+    if (!shouldShowCountryField) return;
     if (hasManuallyPickedCountry.current) return;
     if (!selectedCountry) return;
     const code = selectedCountry.toUpperCase();
     if (code in COUNTRY_INFO) {
       setCountry(code as CountryCode);
     }
-  }, [selectedCountry]);
+  }, [selectedCountry, shouldShowCountryField]);
 
   // Some categories behave like "single position" entries.
   React.useEffect(() => {
@@ -313,6 +325,13 @@ export default function AddAssetScreen() {
             }
         : undefined;
 
+    // Avoid using onboarding country for listed assets (e.g., AAPL shouldn't become "Canada" by default).
+    const countryToPersist: CountryCode | undefined = shouldShowCountryField
+      ? country
+      : isGlobalByDefault
+        ? 'GLOBAL'
+        : undefined;
+
     addAsset({
       name: name.trim(),
       ticker: ticker.trim() || undefined,
@@ -327,8 +346,11 @@ export default function AddAssetScreen() {
       platform: platformValue.trim() || undefined,
       notes: notes.trim() || undefined,
       address: address.trim() || undefined,
-      country,
-      countryName: country === 'OTHER' ? customCountryName.trim() || undefined : undefined,
+      country: countryToPersist,
+      countryName:
+        shouldShowCountryField && country === 'OTHER'
+          ? customCountryName.trim() || undefined
+          : undefined,
       isManual: !canSearchTicker, // Mark as manual if it's not a searchable category
       costBasisEstimated: startTrackingToday ? true : undefined,
       recurringContribution,
@@ -558,58 +580,60 @@ export default function AddAssetScreen() {
             )}
           </Animated.View>
 
-          {/* Country / Region */}
-          <Animated.View entering={FadeInDown.delay(375)} className="mt-6">
-            <Text className="text-gray-400 text-sm mb-2">
-              {isRealEstate ? 'Property Country' : 'Country / Region'}
-            </Text>
-            <Pressable
-              onPress={() => setShowCountryPicker(!showCountryPicker)}
-              className="bg-white/10 rounded-xl p-4 flex-row items-center justify-between"
-            >
-              <Text className="text-white">
-                {COUNTRY_INFO[country]?.flag} {country === 'OTHER' ? (customCountryName || 'Other') : COUNTRY_INFO[country]?.name} ({country})
+          {shouldShowCountryField && (
+            <Animated.View entering={FadeInDown.delay(375)} className="mt-6">
+              <Text className="text-gray-400 text-sm mb-2">
+                {isRealEstate ? 'Property Country' : 'Country / Region'}
               </Text>
-              <ChevronDown size={20} color="#9CA3AF" />
-            </Pressable>
+              <Pressable
+                onPress={() => setShowCountryPicker(!showCountryPicker)}
+                className="bg-white/10 rounded-xl p-4 flex-row items-center justify-between"
+              >
+                <Text className="text-white">
+                  {COUNTRY_INFO[country]?.flag}{' '}
+                  {country === 'OTHER' ? (customCountryName || 'Other') : COUNTRY_INFO[country]?.name} ({country})
+                </Text>
+                <ChevronDown size={20} color="#9CA3AF" />
+              </Pressable>
 
-            {showCountryPicker && (
-              <Animated.View entering={FadeIn} className="bg-white/5 rounded-xl mt-2 overflow-hidden">
-                {COUNTRY_CODES.map((code) => (
-                  <Pressable
-                    key={code}
-                    onPress={() => {
-                      hasManuallyPickedCountry.current = true;
-                      setCountry(code);
-                      if (code !== 'OTHER') setCustomCountryName('');
-                      setShowCountryPicker(false);
-                      Haptics.selectionAsync();
-                    }}
-                    className={cn(
-                      'flex-row items-center p-4 border-b border-white/5',
-                      country === code && 'bg-indigo-600/20'
-                    )}
-                  >
-                    <Text className="text-gray-400 w-10">{COUNTRY_INFO[code].flag}</Text>
-                    <Text className="text-white flex-1">{COUNTRY_INFO[code].name}</Text>
-                    {country === code && <Check size={16} color="#6366F1" />}
-                  </Pressable>
-                ))}
-              </Animated.View>
-            )}
+              {showCountryPicker && (
+                <Animated.View entering={FadeIn} className="bg-white/5 rounded-xl mt-2 overflow-hidden">
+                  {COUNTRY_CODES.map((code) => (
+                    <Pressable
+                      key={code}
+                      onPress={() => {
+                        hasManuallyPickedCountry.current = true;
+                        setCountry(code);
+                        if (code !== 'OTHER') setCustomCountryName('');
+                        setShowCountryPicker(false);
+                        Haptics.selectionAsync();
+                      }}
+                      className={cn(
+                        'flex-row items-center p-4 border-b border-white/5',
+                        country === code && 'bg-indigo-600/20'
+                      )}
+                    >
+                      <Text className="text-gray-400 w-10">{COUNTRY_INFO[code].flag}</Text>
+                      <Text className="text-white flex-1">{COUNTRY_INFO[code].name}</Text>
+                      {country === code && <Check size={16} color="#6366F1" />}
+                    </Pressable>
+                  ))}
+                </Animated.View>
+              )}
 
-            {country === 'OTHER' && (
-              <View className="mt-3">
-                <TextInput
-                  value={customCountryName}
-                  onChangeText={setCustomCountryName}
-                  placeholder="Enter country name"
-                  placeholderTextColor="#6B7280"
-                  className="bg-white/10 rounded-xl p-4 text-white"
-                />
-              </View>
-            )}
-          </Animated.View>
+              {country === 'OTHER' && (
+                <View className="mt-3">
+                  <TextInput
+                    value={customCountryName}
+                    onChangeText={setCustomCountryName}
+                    placeholder="Enter country name"
+                    placeholderTextColor="#6B7280"
+                    className="bg-white/10 rounded-xl p-4 text-white"
+                  />
+                </View>
+              )}
+            </Animated.View>
+          )}
 
           {/* Purchase Date */}
           <Animated.View entering={FadeInDown.delay(400)} className="mt-6">

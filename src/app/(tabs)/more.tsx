@@ -99,23 +99,23 @@ export default function MoreScreen() {
                 className="mt-4"
               >
                 <LinearGradient
-                  colors={['#F59E0B', '#D97706']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ borderRadius: 16, padding: 16 }}
-                >
-                  <View className="flex-row items-center">
-                    <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center">
-                      <Sparkles size={20} color="white" />
-                    </View>
-                    <View className="flex-1 ml-3">
-                      <Text className="text-white font-semibold">Upgrade to Premium</Text>
-                      <Text className="text-white/80 text-sm">Unlock advanced analytics</Text>
-                    </View>
-                    <ChevronRight size={20} color="white" />
-                  </View>
-                </LinearGradient>
-              </Pressable>
+                      colors={['#F59E0B', '#D97706']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ borderRadius: 16, padding: 16 }}
+                    >
+                      <View className="flex-row items-center">
+                        <View className="w-10 h-10 rounded-full bg-white/20 items-center justify-center">
+                          <Sparkles size={20} color="white" />
+                        </View>
+                        <View className="flex-1 ml-3">
+                          <Text className="text-white font-semibold">Unlock Premium</Text>
+                          <Text className="text-white/80 text-sm">See everything clearly, in one place</Text>
+                        </View>
+                        <ChevronRight size={20} color="white" />
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
             </Animated.View>
           )}
 
