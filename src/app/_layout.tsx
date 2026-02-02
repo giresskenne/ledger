@@ -16,6 +16,7 @@ import { useRouter, useSegments } from 'expo-router';
 import { BiometricGate } from '@/components/BiometricGate';
 import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useLegalStore } from '@/lib/legal-store';
+import { useAppRatingStore } from '@/lib/app-rating-store';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -45,6 +46,14 @@ function RootLayoutNav() {
   const { isDark, theme } = useTheme();
   const hasCompletedOnboarding = useOnboardingStore((s) => s.hasCompletedOnboarding);
   const hasAcceptedDisclaimer = useLegalStore((s) => s.hasAcceptedDisclaimer);
+  const incrementAppOpens = useAppRatingStore((s) => s.incrementAppOpens);
+  const markDayUsed = useAppRatingStore((s) => s.markDayUsed);
+
+  useEffect(() => {
+    // Track app opens and daily usage for rating prompts
+    incrementAppOpens();
+    markDayUsed();
+  }, [incrementAppOpens, markDayUsed]);
 
   useEffect(() => {
     // Clear corrupted market data cache on startup (one-time fix)
@@ -68,8 +77,13 @@ function RootLayoutNav() {
       syncLegacyStore(setLegacyPremium);
     });
 
-    // Hide splash screen after layout is mounted
-    SplashScreen.hideAsync();
+    // Hide splash screen after a brief delay for visual polish
+    const hideSplash = async () => {
+      // Wait 1 second so users can see the splash branding
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await SplashScreen.hideAsync();
+    };
+    hideSplash();
 
     // Cleanup subscription listener on unmount
     return () => {

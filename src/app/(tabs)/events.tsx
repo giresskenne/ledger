@@ -46,7 +46,8 @@ import { useSyncGeneratedEvents } from '@/lib/events';
 import { formatCurrency } from '@/lib/formatters';
 import { useTheme } from '@/lib/theme-store';
 import { useRoomStore } from '@/lib/room-store';
-import type { PayFrequency, RegisteredAccountType } from '@/lib/types';
+import { usePriceDisplay } from '@/lib/market-data/hooks';
+import type { Asset, PayFrequency, RegisteredAccountType } from '@/lib/types';
 
 const EventIcon = ({ type }: { type: EventType }) => {
   const info = EVENT_TYPE_INFO[type];
@@ -319,10 +320,12 @@ function EventDetailModal({
 }) {
   // Hooks must be unconditional; keep them at the top even when `event` is null.
   const { theme, isDark } = useTheme();
+  const refreshGeneratedEvents = useSyncGeneratedEvents();
   const confirmAutopilotOccurrence = useRoomStore((s) => s.confirmAutopilotOccurrence);
   const confirmContributionReminderOccurrence = useRoomStore(
     (s) => s.confirmContributionReminderOccurrence
   );
+  const logContributionNow = useRoomStore((s) => s.logContributionNow);
   const [autopilotError, setAutopilotError] = React.useState<string | null>(null);
   React.useEffect(() => {
     setAutopilotError(null);
@@ -332,9 +335,10 @@ function EventDetailModal({
   const applyAssetContribution = usePortfolioStore((s) => s.applyAssetContribution);
   const updateAsset = usePortfolioStore((s) => s.updateAsset);
   const asset = React.useMemo(() => {
-    if (!event?.assetId) return undefined;
-    return assets.find((a) => a.id === event.assetId);
+    if (!event?.assetId) return null;
+    return assets.find((a) => a.id === event.assetId) ?? null;
   }, [assets, event?.assetId]);
+  const priceData = usePriceDisplay(asset);
 
   const autopilotInfo = React.useMemo(
     () => (event?.id ? parseAutopilotEventId(event.id) : null),
@@ -385,6 +389,7 @@ function EventDetailModal({
     Haptics.notificationAsync(
       result.wasCapped ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
     );
+    refreshGeneratedEvents();
     onClose();
   };
 
@@ -412,6 +417,7 @@ function EventDetailModal({
     Haptics.notificationAsync(
       result.wasCapped ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
     );
+    refreshGeneratedEvents();
     onClose();
   };
 
@@ -472,16 +478,35 @@ function EventDetailModal({
 
     const recurring = asset.recurringContribution;
     const amount = Number(recurring.amount);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAutopilotError('Missing amount — please edit the recurring contribution settings.');
+      return;
+    }
 
-    // If it hasn't been applied yet for that month, apply it now.
-    if (recurring.lastAppliedId !== contributionOccurrenceId) {
-      if (!Number.isFinite(asset.currentPrice) || asset.currentPrice <= 0) return;
-      applyAssetContribution({
-        assetId: asset.id,
-        amount,
-        date: new Date().toISOString(),
-      });
+    // Use the freshest available price at the moment the user taps "Mark as done".
+    // If provider fails, `usePriceDisplay` falls back to the stored price.
+    const tapPrice = Number(priceData.price);
+    const hasTapPrice = Number.isFinite(tapPrice) && tapPrice > 0;
+    if (!hasTapPrice && asset.category !== 'cash') {
+      setAutopilotError('Missing price — open the asset and set a price so we can compute quantity.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    // Always attempt to apply at tap-time. The store dedupes by `occurrenceId` for listed assets.
+    // This fixes the "Validate" case where lastAppliedId may have been set even if the buy failed earlier.
+    const applied = applyAssetContribution({
+      assetId: asset.id,
+      amount,
+      date: new Date().toISOString(),
+      occurrenceId: contributionOccurrenceId,
+      unitPriceOverride: hasTapPrice ? tapPrice : undefined,
+    });
+
+    if (!applied.ok) {
+      setAutopilotError(applied.reason || 'Could not update the holding');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
     }
 
     updateAsset(asset.id, {
@@ -492,7 +517,30 @@ function EventDetailModal({
       },
     });
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // If this holding is tagged as "held in" a registered account, also log the contribution in the room tracker.
+    // This is the MVP link between holdings and registered-account tracking.
+    if (asset.heldIn) {
+      const roomResult = logContributionNow({
+        accountType: asset.heldIn,
+        amount,
+        date: new Date().toISOString(),
+        notes: `Holding contribution: ${asset.name}`,
+      });
+
+      if (!roomResult.ok) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setAutopilotError(roomResult.reason || 'Could not update contribution room');
+        // Still refresh and close; the holding update may have succeeded.
+      } else {
+        Haptics.notificationAsync(
+          roomResult.wasCapped ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success
+        );
+      }
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
+    refreshGeneratedEvents();
     onClose();
   };
 
@@ -735,6 +783,8 @@ export default function EventsScreen() {
 
   const refreshGeneratedEvents = useSyncGeneratedEvents();
   const events = useNotificationsStore((s) => s.events);
+  const addEvent = useNotificationsStore((s) => s.addEvent);
+  const assets = usePortfolioStore((s) => s.assets);
   const { isPremium } = useEntitlementStatus();
   const markEventAsRead = useNotificationsStore((s) => s.markEventAsRead);
   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead);
@@ -790,6 +840,29 @@ export default function EventsScreen() {
     setModalVisible(false);
     setSelectedEvent(null);
   };
+
+  const toISODateId = (date: Date) => date.toISOString().slice(0, 10);
+
+  const triggerDebugContributionEvent = React.useCallback(() => {
+    if (!__DEV__) return;
+    const target = assets.find((a) => a.recurringContribution?.enabled) ?? assets[0];
+    if (!target) return;
+    const now = new Date();
+    const occurrenceId = `debug-${toISODateId(now)}-${now.getTime()}`;
+    const id = `assetcontrib_${target.id}_weekly_${occurrenceId}`;
+    const amount = target.recurringContribution?.amount ?? 100;
+    addEvent({
+      id,
+      type: 'contribution_reminder',
+      title: `Debug contribution: ${target.name}`,
+      description: 'Debug event to test Mark as done.',
+      date: new Date().toISOString(),
+      assetId: target.id,
+      assetName: target.name,
+      amount,
+      currency: target.currency,
+    });
+  }, [addEvent, assets]);
 
   const filterOptions: { key: EventType | 'all'; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -971,6 +1044,31 @@ export default function EventsScreen() {
             ))}
           </ScrollView>
         </Animated.View>
+
+        {__DEV__ && (
+          <Animated.View entering={FadeInDown.delay(220)} className="px-5 mb-4">
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                triggerDebugContributionEvent();
+              }}
+              className="w-full flex-row items-center justify-between rounded-2xl px-4 py-3 border"
+              style={{ borderColor: theme.border, backgroundColor: theme.surfaceHover }}
+            >
+              <View>
+                <Text className="text-xs font-semibold text-indigo-200">
+                  DEV: queue contribution reminder for first asset
+                </Text>
+                <Text className="text-[10px] text-gray-400 mt-1">
+                  Use this to confirm that “Mark as done” updates both the stock and room.
+                </Text>
+              </View>
+              <Text className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">
+                trigger
+              </Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
         {viewMode === 'calendar' ? (
           <Animated.View entering={FadeInDown.delay(180)} className="px-5 mb-6">

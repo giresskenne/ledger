@@ -445,6 +445,58 @@ export async function fetchStockQuote(
   }
 }
 
+export interface CompanyOverview {
+  sector?: string;
+  industry?: string;
+}
+
+export async function fetchCompanyOverview(
+  symbol: string
+): Promise<MarketDataResult<CompanyOverview>> {
+  const cacheKey = symbol.toUpperCase();
+
+  const cached = await getCachedData<CompanyOverview>('overview', cacheKey);
+  if (cached) {
+    return { ok: true, data: cached };
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return {
+      ok: false,
+      reason: 'Alpha Vantage API key not configured',
+    };
+  }
+
+  try {
+    const url = `${ALPHA_VANTAGE_BASE_URL}?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`;
+    const response = await rateLimitedFetch(url);
+
+    if (!response.ok) {
+      return { ok: false, reason: `HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    if (data['Error Message'] || data['Note']) {
+      return {
+        ok: false,
+        reason: data['Error Message'] || data['Note'] || 'Unable to fetch company overview',
+      };
+    }
+
+    const overview: CompanyOverview = {
+      sector: typeof data.Sector === 'string' && data.Sector.length > 0 ? data.Sector : undefined,
+      industry: typeof data.Industry === 'string' && data.Industry.length > 0 ? data.Industry : undefined,
+    };
+
+    await setCachedData('overview', cacheKey, overview, 'overview');
+    return { ok: true, data: overview };
+  } catch (error) {
+    console.error('[AlphaVantage] Overview fetch error:', error);
+    return { ok: false, reason: 'Network error fetching overview', error };
+  }
+}
+
 // Helper to check if API key is configured
 export function isAlphaVantageConfigured(): boolean {
   return getApiKey() !== null;

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTheme } from '@/lib/theme-store';
 
 const CURRENCIES = [
   { code: 'USD', name: 'US Dollar', symbol: '$', flag: '🇺🇸' },
@@ -22,6 +23,7 @@ const CURRENCIES = [
 export default function CurrencySelectorScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
   const [selectedCurrency, setSelectedCurrency] = React.useState('USD');
 
   const handleSelect = (code: string) => {
@@ -34,20 +36,21 @@ export default function CurrencySelectorScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Header */}
       <View
-        style={{ paddingTop: insets.top }}
-        className="px-5 pb-4 border-b border-white/10"
+        style={{ paddingTop: insets.top, borderBottomColor: theme.border }}
+        className="px-5 pb-4 border-b"
       >
         <View className="flex-row items-center">
           <Pressable
             onPress={() => router.back()}
-            className="w-10 h-10 bg-white/10 rounded-full items-center justify-center mr-3"
+            style={{ backgroundColor: theme.surface }}
+            className="w-10 h-10 rounded-full items-center justify-center mr-3"
           >
-            <ArrowLeft size={20} color="white" />
+            <ArrowLeft size={20} color={theme.text} />
           </Pressable>
-          <Text className="text-white text-xl font-bold">Display Currency</Text>
+          <Text style={{ color: theme.text }} className="text-xl font-bold">Display Currency</Text>
         </View>
       </View>
 
@@ -56,7 +59,7 @@ export default function CurrencySelectorScreen() {
         contentContainerStyle={{ paddingVertical: 20, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-gray-400 text-sm mb-4">
+        <Text style={{ color: theme.textSecondary }} className="text-sm mb-4">
           Select the currency for displaying values throughout the app
         </Text>
 
@@ -64,12 +67,13 @@ export default function CurrencySelectorScreen() {
           <Animated.View key={currency.code} entering={FadeInDown.delay(index * 30)}>
             <Pressable
               onPress={() => handleSelect(currency.code)}
-              className="bg-white/5 rounded-xl p-4 mb-3 flex-row items-center"
+              style={{ backgroundColor: theme.surface }}
+              className="rounded-xl p-4 mb-3 flex-row items-center"
             >
               <Text className="text-3xl mr-3">{currency.flag}</Text>
               <View className="flex-1">
-                <Text className="text-white font-semibold">{currency.name}</Text>
-                <Text className="text-gray-400 text-sm mt-0.5">
+                <Text style={{ color: theme.text }} className="font-semibold">{currency.name}</Text>
+                <Text style={{ color: theme.textSecondary }} className="text-sm mt-0.5">
                   {currency.code} ({currency.symbol})
                 </Text>
               </View>

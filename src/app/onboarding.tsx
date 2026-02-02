@@ -2,7 +2,7 @@
  * Onboarding flow: collects country, tracking intent, optional registered accounts, and preferences.
  * Handles account types that don't have a single standard cap (e.g., US 529) without breaking the UI.
  */
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as Calendar from 'expo-calendar';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -28,12 +30,18 @@ import Animated, {
   withTiming,
   withDelay,
   withSequence,
+  withRepeat,
+  interpolate,
+  Easing,
+  runOnJS,
   FadeIn,
   FadeOut,
   FadeInDown,
   FadeInUp,
   SlideInRight,
   SlideOutLeft,
+  ZoomIn,
+  ZoomOut,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { PlatformPicker } from '@/components/PlatformPicker';
@@ -48,7 +56,7 @@ import {
   Search,
   ChevronLeft,
   ChevronDown,
-  Calendar,
+  Calendar as CalendarIcon,
   DollarSign,
   Target,
   Coins,
@@ -66,6 +74,10 @@ import {
   Settings,
   Infinity,
   X,
+  Fingerprint,
+  Star,
+  ScanFace,
+  Clock,
 } from 'lucide-react-native';
 import {
   useOnboardingStore,
@@ -155,6 +167,16 @@ const TRACKING_ICONS: Record<TrackingIntent, React.ComponentType<{ size: number;
   registered_accounts: Shield,
 };
 
+// Color mapping for tracking intents
+const TRACKING_COLORS: Record<TrackingIntent, string> = {
+  stocks: '#6366F1',
+  crypto: '#EC4899',
+  real_estate: '#10B981',
+  private_investments: '#F59E0B',
+  cash_savings: '#EF4444',
+  registered_accounts: '#8B5CF6',
+};
+
 // ==================== CINEMATIC VISUALS ====================
 
 function FloatingOrb({
@@ -232,28 +254,29 @@ function FloatingOrb({
 
 function ScatteredVisual({ accentColor }: { accentColor: string }) {
   const items = [
-    { IconComponent: TrendingUp, x: 30, y: 60, delay: 0 },
-    { IconComponent: Home, x: SCREEN_WIDTH - 100, y: 40, delay: 100 },
-    { IconComponent: Wallet, x: 50, y: 180, delay: 200 },
-    { IconComponent: Coins, x: SCREEN_WIDTH - 80, y: 160, delay: 300 },
-    { IconComponent: BarChart3, x: SCREEN_WIDTH / 2 - 20, y: 100, delay: 400 },
-    { IconComponent: Zap, x: 80, y: 280, delay: 500 },
+    { IconComponent: TrendingUp, x: 30, y: 60, delay: 0, color: '#EF4444' },
+    { IconComponent: Home, x: SCREEN_WIDTH - 100, y: 40, delay: 100, color: '#F97316' },
+    { IconComponent: BarChart3, x: SCREEN_WIDTH / 2 - 20, y: 100, delay: 400, color: '#F59E0B' },
+    { IconComponent: Wallet, x: 50, y: 180, delay: 200, color: '#EC4899' },
+    { IconComponent: Coins, x: SCREEN_WIDTH - 80, y: 160, delay: 300, color: '#F97316' },
+    { IconComponent: Zap, x: 80, y: 280, delay: 500, color: '#EF4444' },
   ];
 
   return (
     <View style={{ height: 320, position: 'relative' }}>
       {items.map((item, index) => (
-        <View
+        <Animated.View
           key={index}
+          entering={FadeInDown.delay(item.delay).springify()}
           style={{
             position: 'absolute',
             left: item.x,
             top: item.y,
-            opacity: 0.7,
+            opacity: 0.85,
           }}
         >
-          <item.IconComponent size={32} color={accentColor} />
-        </View>
+          <item.IconComponent size={32} color={item.color} />
+        </Animated.View>
       ))}
       <FloatingOrb delay={0} size={120} color={`${accentColor}15`} startX={20} startY={50} />
       <FloatingOrb delay={300} size={80} color={`${accentColor}10`} startX={SCREEN_WIDTH - 120} startY={200} />
@@ -272,7 +295,8 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
 
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
-      <View
+      <Animated.View
+        entering={FadeInDown.delay(100).springify()}
         style={{
           width: SCREEN_WIDTH - 80,
           backgroundColor: 'rgba(255,255,255,0.05)',
@@ -282,15 +306,15 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
           borderColor: 'rgba(255,255,255,0.1)',
         }}
       >
-        <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 4 }}>TOTAL PORTFOLIO</Text>
-        <Text style={{ color: 'white', fontSize: 32, fontWeight: '700' }}>$847,350</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+        <Animated.Text entering={FadeIn.delay(200)} style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 4 }}>TOTAL PORTFOLIO</Animated.Text>
+        <Animated.Text entering={FadeIn.delay(300)} style={{ color: 'white', fontSize: 32, fontWeight: '700' }}>$847,350</Animated.Text>
+        <Animated.View entering={FadeIn.delay(400)} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: accentColor }} />
           <Text style={{ color: accentColor, marginLeft: 6, fontWeight: '600' }}>+12.4%</Text>
           <Text style={{ color: '#6B7280', marginLeft: 4 }}>all time</Text>
-        </View>
+        </Animated.View>
 
-        <View style={{ height: 8, borderRadius: 4, flexDirection: 'row', overflow: 'hidden', marginTop: 20 }}>
+        <Animated.View entering={FadeIn.delay(500)} style={{ height: 8, borderRadius: 4, flexDirection: 'row', overflow: 'hidden', marginTop: 20 }}>
           {categories.map((cat, i) => (
             <View
               key={cat.label}
@@ -301,9 +325,9 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
               }}
             />
           ))}
-        </View>
+        </Animated.View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 16, gap: 12 }}>
+        <Animated.View entering={FadeIn.delay(600)} style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 16, gap: 12 }}>
           {categories.slice(0, 4).map((cat) => (
             <View key={cat.label} style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View
@@ -318,8 +342,8 @@ function UnifiedVisual({ accentColor }: { accentColor: string }) {
               <Text style={{ color: '#9CA3AF', fontSize: 12 }}>{cat.label}</Text>
             </View>
           ))}
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
       <FloatingOrb delay={0} size={100} color={`${accentColor}12`} startX={-20} startY={80} />
     </View>
   );
@@ -331,7 +355,8 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
       <View style={{ alignItems: 'center' }}>
-        <View
+        <Animated.View
+          entering={ZoomIn.delay(100).springify()}
           style={{
             width: 160,
             height: 160,
@@ -358,12 +383,13 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
           />
           <Text style={{ color: 'white', fontSize: 48, fontWeight: '700' }}>{riskScore}</Text>
           <Text style={{ color: '#9CA3AF', fontSize: 12 }}>RISK SCORE</Text>
-        </View>
+        </Animated.View>
 
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 32 }}>
           {['Tech: 45%', 'US: 85%', 'Equity: 60%'].map((insight, i) => (
-            <View
+            <Animated.View
               key={insight}
+              entering={FadeInDown.delay(300 + i * 100).springify()}
               style={{
                 paddingHorizontal: 16,
                 paddingVertical: 10,
@@ -376,7 +402,7 @@ function AnalysisVisual({ accentColor }: { accentColor: string }) {
               <Text style={{ color: i === 0 ? '#EF4444' : '#9CA3AF', fontSize: 13, fontWeight: '500' }}>
                 {insight}
               </Text>
-            </View>
+            </Animated.View>
           ))}
         </View>
       </View>
@@ -395,7 +421,11 @@ function CTAVisual({ accentColor }: { accentColor: string }) {
 
   return (
     <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
-      <View>
+      {/* Wallet Icon - matches app branding */}
+      <Animated.View 
+        entering={ZoomIn.delay(100).springify()} 
+        style={{ alignItems: 'center', marginBottom: 32 }}
+      >
         <View
           style={{
             width: 100,
@@ -404,38 +434,38 @@ function CTAVisual({ accentColor }: { accentColor: string }) {
             backgroundColor: `${accentColor}20`,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 32,
           }}
         >
-          <Zap size={48} color={accentColor} />
+          <Wallet size={48} color={accentColor} />
         </View>
-      </View>
+      </Animated.View>
 
-      <View style={{ gap: 16 }}>
+      {/* Features list - left aligned */}
+      <View style={{ alignSelf: 'stretch', paddingHorizontal: 40, gap: 16 }}>
         {features.map((feature, i) => (
-          <View
+          <Animated.View
             key={feature.label}
+            entering={FadeInDown.delay(200 + i * 100).springify()}
             style={{ flexDirection: 'row', alignItems: 'center' }}
           >
             <View
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: `${accentColor}20`,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: `${accentColor}25`,
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginRight: 12,
+                marginRight: 14,
               }}
             >
-              <feature.icon size={16} color={accentColor} />
+              <feature.icon size={18} color={accentColor} />
             </View>
-            <Text style={{ color: 'white', fontSize: 16, fontWeight: '500' }}>{feature.label}</Text>
-          </View>
+            <Text style={{ color: 'white', fontSize: 17, fontWeight: '500' }}>{feature.label}</Text>
+          </Animated.View>
         ))}
       </View>
       <FloatingOrb delay={100} size={120} color={`${accentColor}10`} startX={SCREEN_WIDTH - 80} startY={0} />
-      <FloatingOrb delay={300} size={80} color={`${accentColor}08`} startX={-20} startY={200} />
     </View>
   );
 }
@@ -597,10 +627,27 @@ function TrackingIntentStep({ onNext, onBack }: { onNext: () => void; onBack: ()
   const trackingIntents = useOnboardingStore((s) => s.trackingIntents);
   const toggleTrackingIntent = useOnboardingStore((s) => s.toggleTrackingIntent);
   const registeredAccountsEnabled = useOnboardingStore((s) => s.registeredAccountsEnabled);
+  
+  // Track which item was just selected for star animation
+  const [justSelected, setJustSelected] = useState<TrackingIntent | null>(null);
 
   const visibleOptions = TRACKING_INTENT_OPTIONS.filter(
     (opt) => !opt.requiresEligibility || registeredAccountsEnabled
   );
+
+  const handleSelect = (optionId: TrackingIntent) => {
+    const wasSelected = trackingIntents.includes(optionId);
+    toggleTrackingIntent(optionId);
+    
+    if (!wasSelected) {
+      // Trigger star animation for newly selected item
+      setJustSelected(optionId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => setJustSelected(null), 600);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
 
   return (
     <View style={styles.setupDarkStep}>
@@ -629,12 +676,12 @@ function TrackingIntentStep({ onNext, onBack }: { onNext: () => void; onBack: ()
         </Animated.View>
 
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          <View style={styles.intentListContainer}>
+          <View style={{ gap: 12, paddingTop: 8, paddingBottom: 20 }}>
             {visibleOptions.map((option, index) => {
               const isSelected = trackingIntents.includes(option.id);
               const IconComponent = TRACKING_ICONS[option.id];
-              const colors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-              const bgColor = colors[index % colors.length];
+              const optionColor = TRACKING_COLORS[option.id];
+              const showStarAnimation = justSelected === option.id;
 
               return (
                 <Animated.View
@@ -642,45 +689,53 @@ function TrackingIntentStep({ onNext, onBack }: { onNext: () => void; onBack: ()
                   entering={FadeInDown.delay(200 + index * 50)}
                 >
                   <Pressable
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      toggleTrackingIntent(option.id);
-                    }}
+                    onPress={() => handleSelect(option.id)}
+                    style={[
+                      styles.trackingOptionCard,
+                      isSelected && { borderColor: optionColor, backgroundColor: `${optionColor}15` },
+                    ]}
                   >
-                    <View style={styles.intentListItem}>
-                      <View
-                        style={[
-                          styles.intentListCircle,
-                          {
-                            backgroundColor: isSelected ? bgColor : 'rgba(255,255,255,0.1)',
-                            borderWidth: isSelected ? 0 : 2,
-                            borderColor: 'rgba(255,255,255,0.2)',
-                          },
-                        ]}
-                      >
-                        <IconComponent
-                          size={24}
-                          color={isSelected ? 'white' : '#6B7280'}
+                    {/* Icon circle */}
+                    <View
+                      style={[
+                        styles.trackingOptionIcon,
+                        isSelected && { backgroundColor: `${optionColor}30` },
+                      ]}
+                    >
+                      <IconComponent
+                        size={24}
+                        color={isSelected ? optionColor : '#6B7280'}
+                      />
+                      {isSelected && (
+                        <View style={[styles.trackingOptionCheck, { backgroundColor: optionColor }]}>
+                          <Check size={10} color="white" />
+                        </View>
+                      )}
+                    </View>
+                    
+                    {/* Label */}
+                    <Text
+                      style={[
+                        styles.trackingOptionLabel,
+                        isSelected && styles.trackingOptionLabelSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    
+                    {/* Star */}
+                    <View style={styles.trackingOptionStar}>
+                      {showStarAnimation ? (
+                        <Animated.View entering={ZoomIn.springify().damping(10).stiffness(400)}>
+                          <Star size={20} color="#F59E0B" fill="#F59E0B" />
+                        </Animated.View>
+                      ) : (
+                        <Star 
+                          size={20} 
+                          color={isSelected ? '#F59E0B' : 'rgba(255,255,255,0.2)'} 
+                          fill={isSelected ? '#F59E0B' : 'transparent'} 
                         />
-                        {isSelected && (
-                          <View
-                            style={[
-                              styles.intentListCheck,
-                              { backgroundColor: bgColor },
-                            ]}
-                          >
-                            <Check size={12} color="white" />
-                          </View>
-                        )}
-                      </View>
-                      <Text
-                        style={[
-                          styles.intentListLabel,
-                          isSelected && styles.intentListLabelSelected,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
+                      )}
                     </View>
                   </Pressable>
                 </Animated.View>
@@ -737,7 +792,105 @@ const WEEKDAYS: { key: number; label: string }[] = [
   { key: 0, label: 'Sun' },
 ];
 
-// First Asset Step - Matches add-asset.tsx exactly
+// Category form copy - matches add-asset.tsx exactly (single source of truth pattern)
+function getCategoryFormCopy(category: AssetCategory): {
+  namePlaceholder: string;
+  quantityLabel: string;
+  quantityPlaceholder: string;
+  purchasePriceLabel: string;
+  purchasePriceOptional?: boolean;
+  currentPriceLabel: string;
+  currentPriceHint: string;
+  hideTicker: boolean;
+  hideQuantity: boolean;
+  supportsRecurringContribution: boolean;
+} {
+  switch (category) {
+    case 'cash':
+      return {
+        namePlaceholder: 'e.g., Checking account, Emergency fund',
+        quantityLabel: 'Accounts',
+        quantityPlaceholder: '1',
+        purchasePriceLabel: 'Starting Balance (optional)',
+        purchasePriceOptional: true,
+        currentPriceLabel: 'Current Balance *',
+        currentPriceHint: 'Update this occasionally to keep your cash total accurate.',
+        hideTicker: true,
+        hideQuantity: true,
+        supportsRecurringContribution: true,
+      };
+    case 'real_estate':
+      return {
+        namePlaceholder: 'e.g., Condo — Downtown, Rental property',
+        quantityLabel: 'Units',
+        quantityPlaceholder: '1',
+        purchasePriceLabel: 'Purchase Price *',
+        currentPriceLabel: 'Current Estimated Value *',
+        currentPriceHint: 'Update this occasionally based on comps or an appraisal.',
+        hideTicker: true,
+        hideQuantity: true,
+        supportsRecurringContribution: false,
+      };
+    case 'bonds':
+    case 'fixed_income':
+      return {
+        namePlaceholder: 'e.g., Government bond, GIC, CD',
+        quantityLabel: 'Face Value / Units *',
+        quantityPlaceholder: '0',
+        purchasePriceLabel: 'Purchase Price (per unit) *',
+        currentPriceLabel: 'Current Price (per unit) *',
+        currentPriceHint: "If you don't have a live quote, use a manual estimate.",
+        hideTicker: true,
+        hideQuantity: false,
+        supportsRecurringContribution: true,
+      };
+    case 'gold':
+    case 'physical_metals':
+      return {
+        namePlaceholder: 'e.g., Gold (oz), Silver bar',
+        quantityLabel: 'Quantity (e.g., oz) *',
+        quantityPlaceholder: '0',
+        purchasePriceLabel: 'Purchase Price (per unit) *',
+        currentPriceLabel: 'Current Price (per unit) *',
+        currentPriceHint: 'Tip: use spot price per ounce and your quantity.',
+        hideTicker: true,
+        hideQuantity: false,
+        supportsRecurringContribution: true,
+      };
+    case 'derivatives':
+      return {
+        namePlaceholder: 'e.g., SPY call option, Futures contract',
+        quantityLabel: 'Contracts *',
+        quantityPlaceholder: '0',
+        purchasePriceLabel: 'Entry Price (per contract) *',
+        currentPriceLabel: 'Current Price (per contract) *',
+        currentPriceHint: 'Update manually to track P&L.',
+        hideTicker: true,
+        hideQuantity: false,
+        supportsRecurringContribution: false,
+      };
+    case 'stocks':
+    case 'funds':
+    case 'crypto':
+    default:
+      return {
+        namePlaceholder: 'e.g., Apple Inc., S&P 500 ETF, Bitcoin',
+        quantityLabel: 'Quantity *',
+        quantityPlaceholder: '0',
+        purchasePriceLabel: 'Purchase Price *',
+        currentPriceLabel: 'Current Price *',
+        currentPriceHint: 'For market-traded assets, prices update automatically.',
+        hideTicker: false,
+        hideQuantity: false,
+        supportsRecurringContribution: true,
+      };
+  }
+}
+
+// Progressive form reveal stages
+type FormStage = 'category' | 'name' | 'ticker' | 'prices' | 'details';
+
+// First Asset Step - Progressive reveal for better UX
 function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const insets = useSafeAreaInsets();
   const addAsset = usePortfolioStore((s) => s.addAsset);
@@ -745,6 +898,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   const selectedCurrency = useOnboardingStore((s) => s.selectedCurrency);
   const selectedCountry = useOnboardingStore((s) => s.selectedCountry);
 
+  // Form state
   const [name, setName] = useState('');
   const [ticker, setTicker] = useState('');
   const [category, setCategory] = useState<AssetCategory>('stocks');
@@ -766,13 +920,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   });
   const [customCountryName, setCustomCountryName] = useState('');
 
-  const [monthlyContributionEnabled, setMonthlyContributionEnabled] = useState(false);
-  const [monthlyContributionAmount, setMonthlyContributionAmount] = useState('');
-  const [monthlyContributionDay, setMonthlyContributionDay] = useState('1');
-  const [paycheckFrequency, setPaycheckFrequency] = useState<'weekly' | 'biweekly' | 'monthly'>('monthly');
-  const [paycheckWeekday, setPaycheckWeekday] = useState<number>(() => new Date().getDay());
-  const [monthlyContributionAutoApply, setMonthlyContributionAutoApply] = useState(true);
-
+  // Picker visibility
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -782,44 +930,35 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   // Ticker search state
   const [isSearchingTicker, setIsSearchingTicker] = useState(false);
   const [tickerSearchError, setTickerSearchError] = useState<string | null>(null);
+  
+  // Progressive reveal - track which stage we're at
+  const [hasSelectedCategory, setHasSelectedCategory] = useState(false);
+  const [hasEnteredName, setHasEnteredName] = useState(false);
+  const [hasSearchedOrSkippedTicker, setHasSearchedOrSkippedTicker] = useState(false);
+  
+  // Use the same form copy as add-asset.tsx
+  const formCopy = useMemo(() => getCategoryFormCopy(category), [category]);
 
   const isFixedIncome = category === 'fixed_income' || category === 'bonds';
   const isRealEstate = category === 'real_estate';
-  const canSearchTicker = category === 'stocks' || category === 'funds' || category === 'crypto';
-  const hideQuantity = category === 'cash' || category === 'real_estate';
-  const purchasePriceOptional = category === 'cash';
+  const canSearchTicker = !formCopy.hideTicker;
 
-  const namePlaceholder =
-    category === 'cash'
-      ? 'e.g., Checking account, Emergency fund'
-      : isRealEstate
-        ? 'e.g., Condo — Downtown, Rental property'
-        : 'e.g., Apple Inc., Gold Bar, etc.';
-
-  const purchasePriceLabel =
-    category === 'cash' ? 'Starting Balance (optional)' : 'Purchase Price *';
-
-  const currentPriceLabel =
-    category === 'cash'
-      ? 'Current Balance *'
-      : isRealEstate
-        ? 'Current Estimated Value *'
-        : 'Current Price *';
-
-  const currentPriceHint =
-    category === 'cash'
-      ? 'Update this occasionally to keep your cash total accurate.'
-      : 'For market-traded assets, prices update automatically. Manual assets require periodic updates.';
+  // Auto-reveal stages based on user input
+  useEffect(() => {
+    if (name.trim().length >= 2) {
+      setHasEnteredName(true);
+    }
+  }, [name]);
 
   // Enforce "single" quantity for certain categories.
-  React.useEffect(() => {
-    if (!hideQuantity) return;
+  useEffect(() => {
+    if (!formCopy.hideQuantity) return;
     if (!quantity || Number(quantity) !== 1) setQuantity('1');
-  }, [hideQuantity, quantity]);
+  }, [formCopy.hideQuantity, quantity]);
 
-  const resolvedQuantity = hideQuantity ? 1 : parseFloat(quantity);
+  const resolvedQuantity = formCopy.hideQuantity ? 1 : parseFloat(quantity);
   const resolvedCurrentPrice = parseFloat(currentPrice);
-  const resolvedPurchasePrice = parseFloat(purchasePrice || (purchasePriceOptional ? currentPrice : ''));
+  const resolvedPurchasePrice = parseFloat(purchasePrice || (formCopy.purchasePriceOptional ? currentPrice : ''));
 
   const canSubmit =
     name.trim() &&
@@ -846,19 +985,19 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         // Populate fields with fetched data
         if (result.data.currentPrice) {
           setCurrentPrice(result.data.currentPrice.toString());
-          // If purchase price is empty, use current price as default
           if (!purchasePrice) {
             setPurchasePrice(result.data.currentPrice.toString());
           }
         }
         if (result.data.name && !name) {
           setName(result.data.name);
+          setHasEnteredName(true);
         }
         if (result.data.currency) {
           setCurrency(result.data.currency);
         }
-
         setTickerSearchError(null);
+        setHasSearchedOrSkippedTicker(true);
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setTickerSearchError(result.reason || 'Unable to fetch price data');
@@ -877,25 +1016,6 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     const finalPlatform = platform === 'Other' ? customPlatform.trim() : platform.trim();
-    const parsedMonthlyAmount = parseFloat(monthlyContributionAmount);
-    const recurringContribution =
-      monthlyContributionEnabled && Number.isFinite(parsedMonthlyAmount) && parsedMonthlyAmount > 0
-        ? paycheckFrequency === 'monthly'
-          ? {
-              enabled: true,
-              frequency: 'monthly' as const,
-              dayOfMonth: clampDayOfMonth(parseInt(monthlyContributionDay || '1', 10)),
-              amount: parsedMonthlyAmount,
-              autoApply: monthlyContributionAutoApply,
-            }
-          : {
-              enabled: true,
-              frequency: paycheckFrequency,
-              weekday: paycheckWeekday,
-              amount: parsedMonthlyAmount,
-              autoApply: monthlyContributionAutoApply,
-            }
-        : undefined;
 
     addAsset({
       name: name.trim(),
@@ -914,11 +1034,18 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
       country,
       countryName: country === 'OTHER' ? customCountryName.trim() || undefined : undefined,
       isManual: !canSearchTicker,
-      recurringContribution,
     });
 
     markFirstAssetAdded();
     onNext();
+  };
+
+  // Handle category selection - triggers reveal of next stage
+  const handleCategorySelect = (cat: AssetCategory) => {
+    setCategory(cat);
+    setShowCategoryPicker(false);
+    setHasSelectedCategory(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   return (
@@ -968,6 +1095,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Title */}
           <Animated.View entering={FadeInDown.delay(100)}>
             <Text style={styles.setupDarkTitle}>Add your first asset</Text>
             <Text style={styles.setupDarkSubtitle}>
@@ -975,8 +1103,8 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
             </Text>
           </Animated.View>
 
-          {/* Category Selector */}
-          <Animated.View entering={FadeInDown.delay(150)} style={{ marginTop: 24 }}>
+          {/* Stage 1: Category Selector - Always visible */}
+          <Animated.View entering={FadeInDown.delay(200)} style={{ marginTop: 24 }}>
             <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Asset Category *</Text>
             <Pressable
               onPress={() => setShowCategoryPicker(!showCategoryPicker)}
@@ -1020,11 +1148,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                 {(Object.keys(CATEGORY_INFO) as AssetCategory[]).map((cat) => (
                   <Pressable
                     key={cat}
-                    onPress={() => {
-                      setCategory(cat);
-                      setShowCategoryPicker(false);
-                      Haptics.selectionAsync();
-                    }}
+                    onPress={() => handleCategorySelect(cat)}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -1051,27 +1175,30 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
             )}
           </Animated.View>
 
-          {/* Name */}
-          <Animated.View entering={FadeInDown.delay(200)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Asset Name *</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder={namePlaceholder}
-              placeholderTextColor="#6B7280"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                color: 'white',
-                fontSize: 16,
-              }}
-            />
-          </Animated.View>
+          {/* Stage 2: Name - Appears after category is selected */}
+          {hasSelectedCategory && (
+            <Animated.View entering={FadeInDown.springify()} style={{ marginTop: 24 }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Asset Name *</Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder={formCopy.namePlaceholder}
+                placeholderTextColor="#6B7280"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  borderRadius: 12,
+                  padding: 16,
+                  color: 'white',
+                  fontSize: 16,
+                }}
+                autoFocus
+              />
+            </Animated.View>
+          )}
 
-          {/* Ticker (optional) - with live data search */}
-          {canSearchTicker && (
-            <Animated.View entering={FadeInDown.delay(250)} style={{ marginTop: 24 }}>
+          {/* Stage 3: Ticker search - Only for stocks/funds/crypto, after name entered */}
+          {hasSelectedCategory && hasEnteredName && canSearchTicker && (
+            <Animated.View entering={FadeInDown.springify()} style={{ marginTop: 24 }}>
               <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
                 Ticker Symbol (Search for live price)
               </Text>
@@ -1122,18 +1249,68 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   Enter a ticker and tap search to fetch live price data
                 </Text>
               )}
+              {/* Skip button if user doesn't want to search */}
+              {!hasSearchedOrSkippedTicker && (
+                <Pressable
+                  onPress={() => setHasSearchedOrSkippedTicker(true)}
+                  style={{ marginTop: 12 }}
+                >
+                  <Text style={{ color: '#6366F1', fontSize: 14 }}>Skip ticker search →</Text>
+                </Pressable>
+              )}
             </Animated.View>
           )}
 
-          {/* Quantity & Price Row */}
-          <Animated.View entering={FadeInDown.delay(300)} style={{ marginTop: 24, flexDirection: 'row', gap: 16 }}>
-            {!hideQuantity && (
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Quantity *</Text>
+          {/* Stage 4: Price fields - Show after ticker stage or for manual assets */}
+          {hasSelectedCategory && hasEnteredName && (hasSearchedOrSkippedTicker || !canSearchTicker) && (
+            <>
+              {/* Quantity & Purchase Price Row */}
+              <Animated.View entering={FadeInDown.springify()} style={{ marginTop: 24, flexDirection: 'row', gap: 16 }}>
+                {!formCopy.hideQuantity && (
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{formCopy.quantityLabel}</Text>
+                    <TextInput
+                      value={quantity}
+                      onChangeText={setQuantity}
+                      placeholder={formCopy.quantityPlaceholder}
+                      placeholderTextColor="#6B7280"
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: 12,
+                        padding: 16,
+                        color: 'white',
+                        fontSize: 16,
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{formCopy.purchasePriceLabel}</Text>
+                  <TextInput
+                    value={purchasePrice}
+                    onChangeText={setPurchasePrice}
+                    placeholder="0.00"
+                    placeholderTextColor="#6B7280"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      borderRadius: 12,
+                      padding: 16,
+                      color: 'white',
+                      fontSize: 16,
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </Animated.View>
+
+              {/* Current Price */}
+              <Animated.View entering={FadeInDown.delay(100).springify()} style={{ marginTop: 24 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{formCopy.currentPriceLabel}</Text>
                 <TextInput
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  placeholder="0"
+                  value={currentPrice}
+                  onChangeText={setCurrentPrice}
+                  placeholder="0.00"
                   placeholderTextColor="#6B7280"
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -1144,225 +1321,16 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   }}
                   keyboardType="decimal-pad"
                 />
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{purchasePriceLabel}</Text>
-              <TextInput
-                value={purchasePrice}
-                onChangeText={setPurchasePrice}
-                placeholder="0.00"
-                placeholderTextColor="#6B7280"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: 12,
-                  padding: 16,
-                  color: 'white',
-                  fontSize: 16,
-                }}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </Animated.View>
-
-          {/* Current Price */}
-          <Animated.View entering={FadeInDown.delay(350)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>{currentPriceLabel}</Text>
-            <TextInput
-              value={currentPrice}
-              onChangeText={setCurrentPrice}
-              placeholder="0.00"
-              placeholderTextColor="#6B7280"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                color: 'white',
-                fontSize: 16,
-              }}
-              keyboardType="decimal-pad"
-            />
-            <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 8 }}>
-              {currentPriceHint}
-            </Text>
-          </Animated.View>
-
-          {/* Currency */}
-          <Animated.View entering={FadeInDown.delay(400)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Currency</Text>
-            <Pressable
-              onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <Text style={{ color: 'white', fontSize: 16 }}>
-                {CURRENCIES.find((c) => c.value === currency)?.label} ({currency})
-              </Text>
-              <ChevronDown size={20} color="#9CA3AF" />
-            </Pressable>
-
-            {showCurrencyPicker && (
-              <Animated.View entering={FadeIn} style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, marginTop: 8, overflow: 'hidden' }}>
-                {CURRENCIES.map((curr) => (
-                  <Pressable
-                    key={curr.value}
-                    onPress={() => {
-                      setCurrency(curr.value);
-                      setShowCurrencyPicker(false);
-                      Haptics.selectionAsync();
-                    }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      padding: 16,
-                      borderBottomWidth: 1,
-                      borderBottomColor: 'rgba(255,255,255,0.05)',
-                      backgroundColor: currency === curr.value ? 'rgba(99,102,241,0.2)' : 'transparent',
-                    }}
-                  >
-                    <Text style={{ color: '#9CA3AF', width: 40, fontSize: 16 }}>{curr.symbol}</Text>
-                    <Text style={{ color: 'white', flex: 1, fontSize: 16 }}>{curr.label}</Text>
-                    {currency === curr.value && <Check size={16} color="#6366F1" />}
-                  </Pressable>
-                ))}
+                <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 8 }}>
+                  {formCopy.currentPriceHint}
+                </Text>
               </Animated.View>
-            )}
-          </Animated.View>
 
-          {/* Country / Region */}
-          <Animated.View entering={FadeInDown.delay(425)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
-              {isRealEstate ? 'Property Country' : 'Country / Region'}
-            </Text>
-            <Pressable
-              onPress={() => setShowCountryPicker(!showCountryPicker)}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <Text style={{ color: 'white', fontSize: 16 }}>
-                {COUNTRY_INFO[country]?.flag}{' '}
-                {country === 'OTHER' ? (customCountryName || 'Other') : COUNTRY_INFO[country]?.name} ({country})
-              </Text>
-              <ChevronDown size={20} color="#9CA3AF" />
-            </Pressable>
-
-            {showCountryPicker && (
-              <Animated.View
-                entering={FadeIn}
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  borderRadius: 12,
-                  marginTop: 8,
-                  overflow: 'hidden',
-                }}
-              >
-                {ASSET_COUNTRY_CODES.map((code) => (
-                  <Pressable
-                    key={code}
-                    onPress={() => {
-                      setCountry(code);
-                      if (code !== 'OTHER') setCustomCountryName('');
-                      setShowCountryPicker(false);
-                      Haptics.selectionAsync();
-                    }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      padding: 16,
-                      borderBottomWidth: 1,
-                      borderBottomColor: 'rgba(255,255,255,0.05)',
-                      backgroundColor: country === code ? 'rgba(99,102,241,0.2)' : 'transparent',
-                    }}
-                  >
-                    <Text style={{ color: '#9CA3AF', width: 40, fontSize: 16 }}>
-                      {COUNTRY_INFO[code].flag}
-                    </Text>
-                    <Text style={{ color: 'white', flex: 1, fontSize: 16 }}>
-                      {COUNTRY_INFO[code].name}
-                    </Text>
-                    {country === code && <Check size={16} color="#6366F1" />}
-                  </Pressable>
-                ))}
-              </Animated.View>
-            )}
-
-            {country === 'OTHER' && (
-              <View style={{ marginTop: 12 }}>
-                <TextInput
-                  value={customCountryName}
-                  onChangeText={setCustomCountryName}
-                  placeholder="Enter country name"
-                  placeholderTextColor="#6B7280"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    borderRadius: 12,
-                    padding: 16,
-                    color: 'white',
-                    fontSize: 16,
-                  }}
-                />
-              </View>
-            )}
-          </Animated.View>
-
-          {/* Purchase Date */}
-          <Animated.View entering={FadeInDown.delay(450)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Purchase Date</Text>
-            <Pressable
-              onPress={() => setShowPurchaseDatePicker(true)}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <Text style={{ color: 'white', fontSize: 16 }}>
-                {purchaseDate.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </Text>
-              <Calendar size={20} color="#9CA3AF" />
-            </Pressable>
-            {showPurchaseDatePicker && (
-              <DateTimePicker
-                value={purchaseDate}
-                mode="date"
-                display="spinner"
-                onChange={(event, date) => {
-                  if (Platform.OS === 'android') {
-                    setShowPurchaseDatePicker(false);
-                  }
-                  if (date) setPurchaseDate(date);
-                }}
-                themeVariant="dark"
-              />
-            )}
-          </Animated.View>
-
-          {/* Fixed Income Fields */}
-          {isFixedIncome && (
-            <>
-              <Animated.View entering={FadeInDown.delay(500)} style={{ marginTop: 24 }}>
-                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Maturity Date</Text>
+              {/* Currency */}
+              <Animated.View entering={FadeInDown.delay(150).springify()} style={{ marginTop: 24 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Currency</Text>
                 <Pressable
-                  onPress={() => setShowMaturityDatePicker(true)}
+                  onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
                     borderRadius: 12,
@@ -1373,307 +1341,132 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   }}
                 >
                   <Text style={{ color: 'white', fontSize: 16 }}>
-                    {maturityDate
-                      ? maturityDate.toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'Select maturity date'}
+                    {CURRENCIES.find((c) => c.value === currency)?.label} ({currency})
                   </Text>
-                  <Calendar size={20} color="#9CA3AF" />
+                  <ChevronDown size={20} color="#9CA3AF" />
                 </Pressable>
-                {showMaturityDatePicker && (
-                  <DateTimePicker
-                    value={maturityDate || new Date()}
-                    mode="date"
-                    display="spinner"
-                    onChange={(event, date) => {
-                      if (Platform.OS === 'android') {
-                        setShowMaturityDatePicker(false);
-                      }
-                      if (date) setMaturityDate(date);
-                    }}
-                    themeVariant="dark"
-                  />
+
+                {showCurrencyPicker && (
+                  <Animated.View entering={FadeIn} style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, marginTop: 8, overflow: 'hidden' }}>
+                    {CURRENCIES.map((curr) => (
+                      <Pressable
+                        key={curr.value}
+                        onPress={() => {
+                          setCurrency(curr.value);
+                          setShowCurrencyPicker(false);
+                          Haptics.selectionAsync();
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: 16,
+                          borderBottomWidth: 1,
+                          borderBottomColor: 'rgba(255,255,255,0.05)',
+                          backgroundColor: currency === curr.value ? 'rgba(99,102,241,0.2)' : 'transparent',
+                        }}
+                      >
+                        <Text style={{ color: '#9CA3AF', width: 40, fontSize: 16 }}>{curr.symbol}</Text>
+                        <Text style={{ color: 'white', flex: 1, fontSize: 16 }}>{curr.label}</Text>
+                        {currency === curr.value && <Check size={16} color="#6366F1" />}
+                      </Pressable>
+                    ))}
+                  </Animated.View>
                 )}
               </Animated.View>
 
-              <Animated.View entering={FadeInDown.delay(550)} style={{ marginTop: 24 }}>
-                <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Interest Rate (%)</Text>
-                <TextInput
-                  value={interestRate}
-                  onChangeText={setInterestRate}
-                  placeholder="e.g., 5.25"
-                  placeholderTextColor="#6B7280"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    borderRadius: 12,
-                    padding: 16,
-                    color: 'white',
-                    fontSize: 16,
-                  }}
-                  keyboardType="decimal-pad"
-                />
-              </Animated.View>
+              {/* Fixed Income specific fields */}
+              {isFixedIncome && (
+                <>
+                  <Animated.View entering={FadeInDown.delay(200).springify()} style={{ marginTop: 24 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Maturity Date</Text>
+                    <Pressable
+                      onPress={() => setShowMaturityDatePicker(true)}
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: 12,
+                        padding: 16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Text style={{ color: 'white', fontSize: 16 }}>
+                        {maturityDate
+                          ? maturityDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'Select maturity date'}
+                      </Text>
+                      <CalendarIcon size={20} color="#9CA3AF" />
+                    </Pressable>
+                    {showMaturityDatePicker && (
+                      <DateTimePicker
+                        value={maturityDate || new Date()}
+                        mode="date"
+                        display="spinner"
+                        onChange={(event, date) => {
+                          if (Platform.OS === 'android') setShowMaturityDatePicker(false);
+                          if (date) setMaturityDate(date);
+                        }}
+                        themeVariant="dark"
+                      />
+                    )}
+                  </Animated.View>
+
+                  <Animated.View entering={FadeInDown.delay(250).springify()} style={{ marginTop: 24 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Interest Rate (%)</Text>
+                    <TextInput
+                      value={interestRate}
+                      onChangeText={setInterestRate}
+                      placeholder="e.g., 5.25"
+                      placeholderTextColor="#6B7280"
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: 12,
+                        padding: 16,
+                        color: 'white',
+                        fontSize: 16,
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </Animated.View>
+                </>
+              )}
+
+              {/* Real Estate specific fields */}
+              {isRealEstate && (
+                <Animated.View entering={FadeInDown.delay(200).springify()} style={{ marginTop: 24 }}>
+                  <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Property Address</Text>
+                  <TextInput
+                    value={address}
+                    onChangeText={setAddress}
+                    placeholder="123 Main St, City, State"
+                    placeholderTextColor="#6B7280"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      borderRadius: 12,
+                      padding: 16,
+                      color: 'white',
+                      fontSize: 16,
+                    }}
+                  />
+                </Animated.View>
+              )}
             </>
           )}
-
-          {/* Real Estate Address */}
-          {isRealEstate && (
-            <Animated.View entering={FadeInDown.delay(500)} style={{ marginTop: 24 }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Property Address</Text>
-              <TextInput
-                value={address}
-                onChangeText={setAddress}
-                placeholder="123 Main St, City, State"
-                placeholderTextColor="#6B7280"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: 12,
-                  padding: 16,
-                  color: 'white',
-                  fontSize: 16,
-                }}
-              />
-            </Animated.View>
-          )}
-
-          {/* Platform / Broker with autocomplete */}
-          <Animated.View entering={FadeInDown.delay(600)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Platform / Broker (optional)</Text>
-            <PlatformPicker
-              value={platform}
-              onValueChange={setPlatform}
-              customValue={customPlatform}
-              onCustomValueChange={setCustomPlatform}
-            />
-          </Animated.View>
-
-          {/* Notes */}
-          <Animated.View entering={FadeInDown.delay(650)} style={{ marginTop: 24 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>Notes (optional)</Text>
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Any additional information..."
-              placeholderTextColor="#6B7280"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: 16,
-                color: 'white',
-                fontSize: 16,
-                minHeight: 100,
-              }}
-              multiline
-              textAlignVertical="top"
-            />
-          </Animated.View>
-
-          {/* Monthly contribution */}
-          {(category === 'stocks' ||
-            category === 'funds' ||
-            category === 'crypto' ||
-            category === 'bonds' ||
-            category === 'fixed_income' ||
-            category === 'gold' ||
-            category === 'physical_metals' ||
-            category === 'cash') && (
-            <Animated.View entering={FadeInDown.delay(675)} style={{ marginTop: 24 }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 14, marginBottom: 8 }}>
-                Paycheck Contribution (optional)
-              </Text>
-              <View
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  borderRadius: 14,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.08)',
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
-                      Enable recurring contribution
-                    </Text>
-                    <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6 }}>
-                      Get a reminder and keep your position updated over time.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={monthlyContributionEnabled}
-                    onValueChange={(v) => setMonthlyContributionEnabled(v)}
-                    trackColor={{ false: '#374151', true: '#6366F1' }}
-                    thumbColor="white"
-                  />
-                </View>
-
-                {monthlyContributionEnabled && (
-                  <View style={{ marginTop: 16 }}>
-                    <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>Paycheck frequency</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                      {(['weekly', 'biweekly', 'monthly'] as const).map((f) => (
-                        <Pressable
-                          key={f}
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            setPaycheckFrequency(f);
-                          }}
-                          style={{
-                            flex: 1,
-                            borderRadius: 12,
-                            paddingVertical: 10,
-                            alignItems: 'center',
-                            borderWidth: 1,
-                            borderColor:
-                              paycheckFrequency === f ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.12)',
-                            backgroundColor:
-                              paycheckFrequency === f ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.05)',
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: paycheckFrequency === f ? '#C7D2FE' : '#D1D5DB',
-                              fontSize: 12,
-                              fontWeight: '700',
-                            }}
-                          >
-                            {f === 'weekly' ? 'Weekly' : f === 'biweekly' ? 'Bi-weekly' : 'Monthly'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Amount</Text>
-                        <TextInput
-                          value={monthlyContributionAmount}
-                          onChangeText={setMonthlyContributionAmount}
-                          placeholder="0.00"
-                          placeholderTextColor="#6B7280"
-                          style={{
-                            backgroundColor: 'rgba(255,255,255,0.1)',
-                            borderRadius: 12,
-                            padding: 14,
-                            color: 'white',
-                            fontSize: 16,
-                          }}
-                          keyboardType="decimal-pad"
-                        />
-                      </View>
-                      {paycheckFrequency === 'monthly' ? (
-                        <View style={{ width: 120 }}>
-                          <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Day (1–28)</Text>
-                          <TextInput
-                            value={monthlyContributionDay}
-                            onChangeText={setMonthlyContributionDay}
-                            placeholder="1"
-                            placeholderTextColor="#6B7280"
-                            style={{
-                              backgroundColor: 'rgba(255,255,255,0.1)',
-                              borderRadius: 12,
-                              padding: 14,
-                              color: 'white',
-                              fontSize: 16,
-                            }}
-                            keyboardType="number-pad"
-                          />
-                        </View>
-                      ) : (
-                        <View style={{ width: 160 }}>
-                          <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>Weekday</Text>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                            {WEEKDAYS.map((d) => (
-                              <Pressable
-                                key={d.key}
-                                onPress={() => {
-                                  Haptics.selectionAsync();
-                                  setPaycheckWeekday(d.key);
-                                }}
-                                style={{
-                                  borderRadius: 10,
-                                  paddingVertical: 8,
-                                  paddingHorizontal: 10,
-                                  borderWidth: 1,
-                                  borderColor:
-                                    paycheckWeekday === d.key
-                                      ? 'rgba(99,102,241,0.5)'
-                                      : 'rgba(255,255,255,0.12)',
-                                  backgroundColor:
-                                    paycheckWeekday === d.key
-                                      ? 'rgba(99,102,241,0.18)'
-                                      : 'rgba(255,255,255,0.05)',
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    color: paycheckWeekday === d.key ? '#C7D2FE' : '#D1D5DB',
-                                    fontSize: 11,
-                                    fontWeight: '700',
-                                  }}
-                                >
-                                  {d.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-                      <View style={{ flex: 1, paddingRight: 12 }}>
-                        <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>
-                          Auto-apply updates
-                        </Text>
-                        <Text style={{ color: '#6B7280', fontSize: 12, marginTop: 6 }}>
-                          When due, Ledger will update your position and ask you to validate it.
-                        </Text>
-                      </View>
-                      <Switch
-                        value={monthlyContributionAutoApply}
-                        onValueChange={(v) => setMonthlyContributionAutoApply(v)}
-                        trackColor={{ false: '#374151', true: '#6366F1' }}
-                        thumbColor="white"
-                      />
-                    </View>
-
-                    <Text style={{ color: '#6B7280', fontSize: 11, marginTop: 12 }}>
-                      You can confirm each contribution from the Events screen.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </Animated.View>
-          )}
-
-          {/* Submit Button */}
-          <Animated.View entering={FadeInDown.delay(700)} style={{ marginTop: 32 }}>
-            <Pressable
-              onPress={handleSubmit}
-              disabled={!canSubmit}
-              style={{
-                borderRadius: 14,
-                padding: 16,
-                alignItems: 'center',
-                backgroundColor: canSubmit ? '#6366F1' : 'rgba(255,255,255,0.1)',
-              }}
-            >
-              <Text
-                style={{
-                  fontWeight: '600',
-                  fontSize: 18,
-                  color: canSubmit ? 'white' : '#6B7280',
-                }}
-              >
-                Add to Portfolio
-              </Text>
-            </Pressable>
-          </Animated.View>
         </ScrollView>
+
+        {/* Bottom submit button */}
+        <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }}>
+          <Pressable
+            onPress={handleSubmit}
+            disabled={!canSubmit}
+            style={{ opacity: canSubmit ? 1 : 0.5 }}
+          >
+            <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.setupButton}>
+              <Text style={styles.setupButtonText}>Add Asset</Text>
+              <ArrowRight size={20} color="white" />
+            </LinearGradient>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
@@ -1891,13 +1684,32 @@ function PayFrequencyStep({ onNext, onBack }: { onNext: () => void; onBack: () =
       <View style={styles.setupDarkContent}>
         <Animated.View entering={FadeInDown.delay(100)}>
           <View style={styles.iconCircleSmall}>
-            <Calendar size={32} color="#6366F1" />
+            <CalendarIcon size={32} color="#6366F1" />
           </View>
 
           <Text style={styles.setupDarkTitle}>How often do you get paid?</Text>
           <Text style={styles.setupDarkSubtitle}>
             We use this to calculate "save per paycheck" targets.
           </Text>
+          
+          {/* Privacy notice */}
+          <View style={{ 
+            marginTop: 16, 
+            backgroundColor: 'rgba(99, 102, 241, 0.1)', 
+            borderRadius: 12, 
+            padding: 12,
+            borderWidth: 1,
+            borderColor: 'rgba(99, 102, 241, 0.2)',
+          }}>
+            <Text style={{ 
+              color: 'rgba(255, 255, 255, 0.7)', 
+              fontSize: 12, 
+              textAlign: 'center',
+              lineHeight: 18,
+            }}>
+              🔒 Your data is encrypted and secured. We never share your financial information.
+            </Text>
+          </View>
         </Animated.View>
 
         <View style={styles.frequencyList}>
@@ -1945,6 +1757,543 @@ function PayFrequencyStep({ onNext, onBack }: { onNext: () => void; onBack: () =
   );
 }
 
+// ==================== ANIMATED STAR BURST COMPONENT ====================
+// Beautiful celebratory animation when user selects an asset category
+function StarBurst({ visible, color }: { visible: boolean; color: string }) {
+  const scale = useSharedValue(0);
+  const opacity = useSharedValue(0);
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      // Reset
+      scale.value = 0;
+      opacity.value = 1;
+      rotation.value = 0;
+      
+      // Animate
+      scale.value = withSequence(
+        withSpring(1.4, { damping: 8, stiffness: 400 }),
+        withSpring(0, { damping: 15, stiffness: 200 })
+      );
+      rotation.value = withTiming(180, { duration: 600, easing: Easing.out(Easing.cubic) });
+      opacity.value = withDelay(400, withTiming(0, { duration: 200 }));
+    }
+  }, [visible]);
+
+  const centerStarStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { rotate: `${rotation.value}deg` },
+    ],
+    opacity: opacity.value,
+  }));
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View 
+      entering={ZoomIn.duration(200)}
+      style={[
+        {
+          position: 'absolute',
+          right: 16,
+          top: '50%',
+          marginTop: -12,
+        },
+        centerStarStyle
+      ]}
+      pointerEvents="none"
+    >
+      <Star size={24} color="#F59E0B" fill="#F59E0B" />
+    </Animated.View>
+  );
+}
+
+// ==================== BIOMETRIC PERMISSION STEP ====================
+// Beautiful Face ID/Touch ID permission request with pulsing animation
+function BiometricPermissionStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const insets = useSafeAreaInsets();
+  const [isChecking, setIsChecking] = useState(false);
+  const [hasHardware, setHasHardware] = useState(true);
+  
+  // Animated values for the pulsing icon
+  const pulseScale = useSharedValue(1);
+  const glowOpacity = useSharedValue(0.3);
+  const scanLineY = useSharedValue(0);
+
+  useEffect(() => {
+    // Check if device supports biometrics
+    const checkHardware = async () => {
+      const hasHw = await LocalAuthentication.hasHardwareAsync();
+      setHasHardware(hasHw);
+      if (!hasHw) {
+        // Skip this step if no biometric hardware
+        onNext();
+      }
+    };
+    checkHardware();
+
+    // Start pulsing animation
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+    
+    glowOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.3, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+
+    // Scanning line animation
+    scanLineY.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const iconPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
+  }));
+
+  const scanLineStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(scanLineY.value, [0, 1], [-40, 40]) }],
+    opacity: interpolate(scanLineY.value, [0, 0.5, 1], [0.3, 0.8, 0.3]),
+  }));
+
+  const handleEnable = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsChecking(true);
+
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Enable biometric protection',
+        cancelLabel: 'Skip',
+        fallbackLabel: 'Use Passcode',
+      });
+
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // User can now use biometrics - proceed to next step
+        onNext();
+      } else {
+        // User cancelled or failed - still proceed
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        onNext();
+      }
+    } catch (error) {
+      console.log('Biometric error:', error);
+      onNext();
+    }
+  };
+
+  const handleSkip = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onNext();
+  };
+
+  if (!hasHardware) return null;
+
+  return (
+    <View style={styles.setupDarkStep}>
+      <LinearGradient
+        colors={['#0a1a2a', '#0A0A0F', '#1a0a2a']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Header */}
+      <View style={[styles.darkHeader, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={onBack} style={styles.darkBackButton}>
+          <ChevronLeft size={24} color="white" />
+        </Pressable>
+        <View style={{ width: 36 }} />
+        <Pressable onPress={handleSkip}>
+          <Text style={styles.skipText}>Skip</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.setupDarkContent}>
+        <Animated.View entering={FadeInDown.delay(100)} style={{ alignItems: 'center' }}>
+          {/* Animated Face ID icon with glow effect */}
+          <View style={{ marginBottom: 32, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Outer glow rings */}
+            <Animated.View 
+              style={[
+                {
+                  position: 'absolute',
+                  width: 160,
+                  height: 160,
+                  borderRadius: 80,
+                  backgroundColor: 'transparent',
+                  borderWidth: 2,
+                  borderColor: '#6366F1',
+                },
+                glowStyle,
+              ]} 
+            />
+            <Animated.View 
+              style={[
+                {
+                  position: 'absolute',
+                  width: 130,
+                  height: 130,
+                  borderRadius: 65,
+                  backgroundColor: 'transparent',
+                  borderWidth: 1.5,
+                  borderColor: '#8B5CF6',
+                },
+                glowStyle,
+              ]} 
+            />
+            
+            {/* Main icon container */}
+            <Animated.View 
+              style={[
+                {
+                  width: 100,
+                  height: 100,
+                  borderRadius: 50,
+                  backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                },
+                iconPulseStyle,
+              ]}
+            >
+              {/* Scanning line effect */}
+              <Animated.View
+                style={[
+                  {
+                    position: 'absolute',
+                    width: '100%',
+                    height: 3,
+                    backgroundColor: '#6366F1',
+                    borderRadius: 1.5,
+                  },
+                  scanLineStyle,
+                ]}
+              />
+              <ScanFace size={48} color="#6366F1" />
+            </Animated.View>
+          </View>
+
+          <Text style={[styles.setupDarkTitle, { textAlign: 'center' }]}>
+            Protect your data
+          </Text>
+          <Text style={[styles.setupDarkSubtitle, { textAlign: 'center', maxWidth: 300 }]}>
+            Ledger uses Face ID to protect your financial data when you leave the app.
+          </Text>
+        </Animated.View>
+
+        {/* Features list */}
+        <Animated.View entering={FadeInDown.delay(300)} style={{ marginTop: 40 }}>
+          {[
+            { icon: Shield, text: 'Quick, secure access to your portfolio', color: '#10B981' },
+            { icon: Fingerprint, text: 'No passwords to remember', color: '#6366F1' },
+            { icon: Zap, text: 'Unlock in under a second', color: '#F59E0B' },
+          ].map((feature, index) => (
+            <Animated.View 
+              key={index}
+              entering={FadeInDown.delay(400 + index * 100)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 16,
+                paddingHorizontal: 20,
+              }}
+            >
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: `${feature.color}20`,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 16,
+              }}>
+                <feature.icon size={20} color={feature.color} />
+              </View>
+              <Text style={{ color: 'white', fontSize: 15 }}>{feature.text}</Text>
+            </Animated.View>
+          ))}
+        </Animated.View>
+
+        <View style={[styles.setupDarkFooter, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable onPress={handleEnable} disabled={isChecking}>
+            <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.setupButton}>
+              {isChecking ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Text style={styles.setupButtonText}>Enable Face ID</Text>
+                  <ScanFace size={20} color="white" />
+                </>
+              )}
+            </LinearGradient>
+          </Pressable>
+          <Text style={styles.notificationDisclaimer}>
+            You can change this in Settings anytime.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ==================== CALENDAR PERMISSION STEP ====================
+// Beautiful calendar permission request with floating event animations
+function CalendarPermissionStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const insets = useSafeAreaInsets();
+  const [isRequesting, setIsRequesting] = useState(false);
+  
+  // Animated values for floating calendar events
+  const event1Y = useSharedValue(0);
+  const event2Y = useSharedValue(0);
+  const event3Y = useSharedValue(0);
+  const calendarScale = useSharedValue(1);
+
+  useEffect(() => {
+    // Floating animation for event cards
+    event1Y.value = withRepeat(
+      withSequence(
+        withTiming(-8, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+    
+    event2Y.value = withDelay(
+      300,
+      withRepeat(
+        withSequence(
+          withTiming(-6, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: 2200, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        true
+      )
+    );
+    
+    event3Y.value = withDelay(
+      600,
+      withRepeat(
+        withSequence(
+          withTiming(-10, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: 1800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        true
+      )
+    );
+
+    calendarScale.value = withRepeat(
+      withSequence(
+        withTiming(1.02, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const event1Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: event1Y.value }],
+  }));
+
+  const event2Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: event2Y.value }],
+  }));
+
+  const event3Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: event3Y.value }],
+  }));
+
+  const calendarScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: calendarScale.value }],
+  }));
+
+  const handleEnable = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsRequesting(true);
+
+    try {
+      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      
+      if (status === 'granted') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onNext();
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        onNext();
+      }
+    } catch (error) {
+      console.log('Calendar permission error:', error);
+      onNext();
+    }
+  };
+
+  const handleSkip = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onNext();
+  };
+
+  const EventCard = ({ 
+    title, 
+    date, 
+    color, 
+    style,
+    icon: IconComponent,
+  }: { 
+    title: string; 
+    date: string; 
+    color: string; 
+    style: any;
+    icon: React.ComponentType<{ size: number; color: string }>;
+  }) => (
+    <Animated.View
+      style={[
+        {
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          borderRadius: 12,
+          padding: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 8,
+          borderLeftWidth: 3,
+          borderLeftColor: color,
+        },
+        style,
+      ]}
+    >
+      <View style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: `${color}20`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+      }}>
+        <IconComponent size={18} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: 'white', fontSize: 14, fontWeight: '600' }}>{title}</Text>
+        <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 2 }}>{date}</Text>
+      </View>
+    </Animated.View>
+  );
+
+  return (
+    <View style={styles.setupDarkStep}>
+      <LinearGradient
+        colors={['#1a2a0a', '#0A0A0F', '#0a1a2a']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Header */}
+      <View style={[styles.darkHeader, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={onBack} style={styles.darkBackButton}>
+          <ChevronLeft size={24} color="white" />
+        </Pressable>
+        <View style={{ width: 36 }} />
+        <Pressable onPress={handleSkip}>
+          <Text style={styles.skipText}>Skip</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.setupDarkContent}>
+        <Animated.View entering={FadeInDown.delay(100)} style={{ alignItems: 'center' }}>
+          {/* Animated Calendar icon */}
+          <Animated.View 
+            style={[
+              {
+                width: 100,
+                height: 100,
+                borderRadius: 24,
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 32,
+              },
+              calendarScaleStyle,
+            ]}
+          >
+            <CalendarIcon size={48} color="#10B981" />
+          </Animated.View>
+
+          <Text style={[styles.setupDarkTitle, { textAlign: 'center' }]}>
+            Never miss a deadline
+          </Text>
+          <Text style={[styles.setupDarkSubtitle, { textAlign: 'center', maxWidth: 320 }]}>
+            Ledger uses calendar access to add and display investment events like dividends, maturity dates, and review reminders.
+          </Text>
+        </Animated.View>
+
+        {/* Floating event cards */}
+        <Animated.View entering={FadeInDown.delay(300)} style={{ marginTop: 32, paddingHorizontal: 20 }}>
+          <EventCard 
+            title="AAPL Dividend Payment" 
+            date="Feb 15, 2025" 
+            color="#10B981" 
+            style={event1Style}
+            icon={DollarSign}
+          />
+          <EventCard 
+            title="Bond Maturity - Treasury" 
+            date="Mar 1, 2025" 
+            color="#F59E0B" 
+            style={event2Style}
+            icon={Target}
+          />
+          <EventCard 
+            title="VOO Monthly Contribution" 
+            date="Every 15th" 
+            color="#6366F1" 
+            style={event3Style}
+            icon={TrendingUp}
+          />
+        </Animated.View>
+
+        <View style={[styles.setupDarkFooter, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable onPress={handleEnable} disabled={isRequesting}>
+            <LinearGradient colors={['#10B981', '#059669']} style={styles.setupButton}>
+              {isRequesting ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Text style={styles.setupButtonText}>Enable Calendar Access</Text>
+                  <CalendarIcon size={20} color="white" />
+                </>
+              )}
+            </LinearGradient>
+          </Pressable>
+          <Text style={styles.notificationDisclaimer}>
+            You can change this in Settings anytime.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // Notifications Consent Step
 function NotificationsStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const insets = useSafeAreaInsets();
@@ -1967,7 +2316,7 @@ function NotificationsStep({ onNext, onBack }: { onNext: () => void; onBack: () 
       id: 'maturityAlerts' as const,
       label: 'Maturity Alerts',
       description: 'When bonds or fixed income mature',
-      icon: Calendar,
+      icon: CalendarIcon,
       color: '#F59E0B',
       showIf: true,
     },
@@ -2274,6 +2623,98 @@ function RoomRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   );
 }
 
+// Confetti particle component for celebrations
+function ConfettiParticle({ 
+  delay, 
+  color, 
+  startX, 
+  duration = 2000 
+}: { 
+  delay: number; 
+  color: string; 
+  startX: number; 
+  duration?: number;
+}) {
+  const translateY = useSharedValue(-20);
+  const translateX = useSharedValue(0);
+  const rotate = useSharedValue(0);
+  const opacity = useSharedValue(1);
+
+  React.useEffect(() => {
+    const randomEndX = (Math.random() - 0.5) * 100;
+    const randomRotation = Math.random() * 720 - 360;
+    
+    translateY.value = withDelay(
+      delay,
+      withTiming(200, { duration, easing: Easing.out(Easing.quad) })
+    );
+    translateX.value = withDelay(
+      delay,
+      withTiming(randomEndX, { duration, easing: Easing.out(Easing.quad) })
+    );
+    rotate.value = withDelay(
+      delay,
+      withTiming(randomRotation, { duration })
+    );
+    opacity.value = withDelay(
+      delay + duration * 0.6,
+      withTiming(0, { duration: duration * 0.4 })
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { rotate: `${rotate.value}deg` },
+    ],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          left: startX,
+          top: 0,
+          width: 8,
+          height: 8,
+          borderRadius: 2,
+          backgroundColor: color,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
+// Confetti burst effect
+function ConfettiBurst() {
+  const colors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+  const particles = React.useMemo(() => {
+    return Array.from({ length: 24 }, (_, i) => ({
+      id: i,
+      color: colors[i % colors.length],
+      startX: SCREEN_WIDTH / 2 - 60 + Math.random() * 120,
+      delay: Math.random() * 400,
+    }));
+  }, []);
+
+  return (
+    <View style={{ position: 'absolute', top: 60, left: 0, right: 0, height: 200, overflow: 'visible' }}>
+      {particles.map((p) => (
+        <ConfettiParticle
+          key={p.id}
+          color={p.color}
+          startX={p.startX}
+          delay={p.delay}
+        />
+      ))}
+    </View>
+  );
+}
+
 // Dashboard Reveal / Congratulations Step
 function DashboardRevealStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const insets = useSafeAreaInsets();
@@ -2300,8 +2741,16 @@ function DashboardRevealStep({ onNext, onBack }: { onNext: () => void; onBack: (
       </View>
 
       <View style={styles.setupDarkContent}>
+        {/* Confetti animation */}
+        <ConfettiBurst />
+        
         <Animated.View entering={FadeInDown.delay(100)} style={{ alignItems: 'center' }}>
-          <Text style={styles.congratsEmoji}>🎉</Text>
+          <Animated.Text 
+            entering={ZoomIn.delay(200).springify()} 
+            style={styles.congratsEmoji}
+          >
+            🎉
+          </Animated.Text>
           <Text style={[styles.setupDarkTitle, { textAlign: 'center', fontSize: 32 }]}>
             You're all set!
           </Text>
@@ -2433,10 +2882,16 @@ export default function OnboardingScreen() {
         if (shouldShowRegisteredAccountsModule()) {
           return 'registered_accounts';
         }
-        return 'notifications';
+        // After first asset, go to biometric permission
+        return 'biometric_permission';
       case 'registered_accounts':
         return 'pay_frequency';
       case 'pay_frequency':
+        // After pay frequency, go to biometric permission
+        return 'biometric_permission';
+      case 'biometric_permission':
+        return 'calendar_permission';
+      case 'calendar_permission':
         return 'notifications';
       case 'notifications':
         if (shouldShowRegisteredAccountsModule() && selectedRegisteredAccounts.length > 0) {
@@ -2464,11 +2919,15 @@ export default function OnboardingScreen() {
         return 'first_asset';
       case 'pay_frequency':
         return 'registered_accounts';
-      case 'notifications':
+      case 'biometric_permission':
         if (shouldShowRegisteredAccountsModule()) {
           return 'pay_frequency';
         }
         return 'first_asset';
+      case 'calendar_permission':
+        return 'biometric_permission';
+      case 'notifications':
+        return 'calendar_permission';
       case 'room_reveal':
         return 'notifications';
       case 'dashboard_reveal':
@@ -2519,55 +2978,78 @@ export default function OnboardingScreen() {
       <View style={styles.container}>
         <LinearGradient colors={[...currentSlide.gradient]} style={StyleSheet.absoluteFill} />
 
-        {/* Back button - only show if not on first slide */}
-        {cinematicIndex > 0 && (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setCinematicIndex((prev) => Math.max(0, prev - 1));
-            }}
-            style={[styles.skipButton, { top: insets.top + 12, left: 20, right: 'auto' }]}
-          >
-            <ChevronLeft size={24} color="white" />
-          </Pressable>
-        )}
+        {/* Header row with back, progress bar, and skip aligned */}
+        <View style={[styles.cinematicHeader, { paddingTop: insets.top + 12 }]}>
+          {/* Back button - only show if not on first slide */}
+          {cinematicIndex > 0 ? (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCinematicIndex((prev) => Math.max(0, prev - 1));
+              }}
+              style={styles.cinematicBackButton}
+            >
+              <ChevronLeft size={24} color="white" />
+            </Pressable>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
 
-        {/* Skip button */}
-        {!isLastCinematicSlide && (
-          <Pressable onPress={handleCinematicSkip} style={[styles.skipButton, { top: insets.top + 12 }]}>
-            <Text style={styles.skipText}>Skip</Text>
-          </Pressable>
-        )}
-
-        {/* Progress bar */}
-        <View style={[styles.progressContainer, { top: insets.top + 12 }]}>
-          <View style={styles.progressTrack}>
-            <Animated.View
-              style={[styles.progressFill, { backgroundColor: currentSlide.accentColor, width: `${((cinematicIndex + 1) / CINEMATIC_SLIDES.length) * 100}%` }]}
-            />
+          {/* Progress bar */}
+          <View style={styles.cinematicProgressContainer}>
+            <View style={styles.progressTrack}>
+              <Animated.View
+                style={[styles.progressFill, { backgroundColor: currentSlide.accentColor, width: `${((cinematicIndex + 1) / CINEMATIC_SLIDES.length) * 100}%` }]}
+              />
+            </View>
           </View>
+
+          {/* Skip button */}
+          {!isLastCinematicSlide ? (
+            <Pressable onPress={handleCinematicSkip} style={styles.cinematicSkipButton}>
+              <Text style={styles.skipText}>Skip</Text>
+            </Pressable>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
 
-        {/* Content */}
-        <View key={currentSlide.id} style={styles.content}>
-          <View style={styles.visualContainer}>
+        {/* Content with slide transition animation */}
+        <Animated.View 
+          key={currentSlide.id} 
+          entering={FadeIn.duration(400)}
+          style={styles.content}
+        >
+          <Animated.View 
+            entering={FadeInDown.delay(100).springify()}
+            style={styles.visualContainer}
+          >
             <SlideVisual visualType={currentSlide.visualType} accentColor={currentSlide.accentColor} />
-          </View>
+          </Animated.View>
 
           <View style={styles.textContainer}>
-            <Text style={[styles.headline, { color: 'white' }]}>
+            <Animated.Text 
+              entering={FadeInDown.delay(200).springify()}
+              style={[styles.headline, { color: 'white' }]}
+            >
               {currentSlide.headline}
-            </Text>
+            </Animated.Text>
 
-            <Text style={styles.subheadline}>
+            <Animated.Text 
+              entering={FadeInDown.delay(300).springify()}
+              style={styles.subheadline}
+            >
               {currentSlide.subheadline}
-            </Text>
+            </Animated.Text>
 
-            <Text style={styles.description}>
+            <Animated.Text 
+              entering={FadeInDown.delay(400).springify()}
+              style={styles.description}
+            >
               {currentSlide.description}
-            </Text>
+            </Animated.Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Bottom actions */}
         <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 20 }]}>
@@ -2627,6 +3109,12 @@ export default function OnboardingScreen() {
       {currentStep === 'pay_frequency' && (
         <PayFrequencyStep onNext={handleNext} onBack={handleBack} />
       )}
+      {currentStep === 'biometric_permission' && (
+        <BiometricPermissionStep onNext={handleNext} onBack={handleBack} />
+      )}
+      {currentStep === 'calendar_permission' && (
+        <CalendarPermissionStep onNext={handleNext} onBack={handleBack} />
+      )}
       {currentStep === 'notifications' && (
         <NotificationsStep onNext={handleNext} onBack={handleBack} />
       )}
@@ -2662,6 +3150,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  // Cinematic header - aligned row with back, progress, skip
+  cinematicHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  cinematicBackButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cinematicProgressContainer: {
+    flex: 1,
+    paddingHorizontal: 12,
+  },
+  cinematicSkipButton: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
   progressContainer: {
     position: 'absolute',
     left: 20,
@@ -2681,7 +3190,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 80,
+    paddingTop: 20,
   },
   visualContainer: {
     flex: 1,
@@ -2947,6 +3456,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 24,
     justifyContent: 'flex-start',
+  },
+  // New tracking option card styles (matching image 5)
+  trackingOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  trackingOptionCardSelected: {
+    borderColor: '#6366F1',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+  },
+  trackingOptionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackingOptionIconSelected: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+  },
+  trackingOptionCheck: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#6366F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackingOptionLabel: {
+    flex: 1,
+    marginLeft: 14,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  trackingOptionLabelSelected: {
+    color: 'white',
+  },
+  trackingOptionStar: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   intentListContainer: {
     gap: 16,

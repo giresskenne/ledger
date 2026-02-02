@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Mail, MessageCircle, Book, ExternalLink, HelpCircle, FileText, Shield, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTheme } from '@/lib/theme-store';
 
 const HELP_TOPICS = [
   {
@@ -35,40 +36,36 @@ const HELP_TOPICS = [
     icon: FileText,
     color: '#EC4899',
   },
-  {
-    id: 'privacy',
-    title: 'Privacy & Security',
-    description: 'How we protect your financial data',
-    icon: Shield,
-    color: '#14B8A6',
-  },
 ];
 
 const CONTACT_OPTIONS = [
   {
     id: 'email',
     title: 'Email Support',
-    description: 'support@ledger-app.com',
+    description: 'contact.corpltd@gmail.com',
     icon: Mail,
-    action: () => Linking.openURL('mailto:support@ledger-app.com'),
+    action: () => Linking.openURL('mailto:contact.corpltd@gmail.com'),
   },
   {
     id: 'faq',
     title: 'FAQ',
     description: 'Find answers to common questions',
     icon: HelpCircle,
-    action: () => Linking.openURL('https://ledger-app.com/faq'),
+    action: () => Linking.openURL('https://giresskenne.github.io/ledger/faq.html'),
   },
 ];
 
 export default function HelpCenterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
 
   const handleTopicPress = (topicId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Navigate to detailed help article
-    console.log('Opening help topic:', topicId);
+    const url = `https://giresskenne.github.io/ledger/${topicId}.html`;
+    Linking.openURL(url).catch(() => {
+      console.log('Failed to open help topic:', topicId);
+    });
   };
 
   const handleContactPress = (action: () => void) => {
@@ -77,20 +74,21 @@ export default function HelpCenterScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Header */}
       <View
-        style={{ paddingTop: insets.top }}
-        className="px-5 pb-4 border-b border-white/10"
+        style={{ paddingTop: insets.top, borderBottomColor: theme.border }}
+        className="px-5 pb-4 border-b"
       >
         <View className="flex-row items-center">
           <Pressable
             onPress={() => router.back()}
-            className="w-10 h-10 bg-white/10 rounded-full items-center justify-center mr-3"
+            style={{ backgroundColor: theme.surface }}
+            className="w-10 h-10 rounded-full items-center justify-center mr-3"
           >
-            <ArrowLeft size={20} color="white" />
+            <ArrowLeft size={20} color={theme.text} />
           </Pressable>
-          <Text className="text-white text-xl font-bold">Help Center</Text>
+          <Text style={{ color: theme.text }} className="text-xl font-bold">Help Center</Text>
         </View>
       </View>
 
@@ -99,19 +97,20 @@ export default function HelpCenterScreen() {
         contentContainerStyle={{ paddingVertical: 20, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-gray-400 text-sm mb-4">
+        <Text style={{ color: theme.textSecondary }} className="text-sm mb-4">
           Get help with using Ledger
         </Text>
 
         {/* Help Topics */}
-        <Text className="text-white font-semibold mb-3">Browse Topics</Text>
+        <Text style={{ color: theme.text }} className="font-semibold mb-3">Browse Topics</Text>
         {HELP_TOPICS.map((topic, index) => {
           const Icon = topic.icon;
           return (
             <Animated.View key={topic.id} entering={FadeInDown.delay(index * 50)}>
               <Pressable
                 onPress={() => handleTopicPress(topic.id)}
-                className="bg-white/5 rounded-xl p-4 mb-3"
+                style={{ backgroundColor: theme.surfaceHover }}
+                className="rounded-xl p-4 mb-3"
               >
                 <View className="flex-row items-center">
                   <View
@@ -121,12 +120,12 @@ export default function HelpCenterScreen() {
                     <Icon size={24} color={topic.color} />
                   </View>
                   <View className="flex-1 ml-4">
-                    <Text className="text-white font-semibold">{topic.title}</Text>
-                    <Text className="text-gray-400 text-sm mt-0.5">
+                    <Text style={{ color: theme.text }} className="font-semibold">{topic.title}</Text>
+                    <Text style={{ color: theme.textSecondary }} className="text-sm mt-0.5">
                       {topic.description}
                     </Text>
                   </View>
-                  <ExternalLink size={18} color="#6B7280" />
+                  <ExternalLink size={18} color={theme.textSecondary} />
                 </View>
               </Pressable>
             </Animated.View>
@@ -134,7 +133,7 @@ export default function HelpCenterScreen() {
         })}
 
         {/* Contact Support */}
-        <Text className="text-white font-semibold mt-6 mb-3">Contact Us</Text>
+        <Text style={{ color: theme.text }} className="font-semibold mt-6 mb-3">Contact Us</Text>
         {CONTACT_OPTIONS.map((option, index) => {
           const Icon = option.icon;
           return (
@@ -144,19 +143,20 @@ export default function HelpCenterScreen() {
             >
               <Pressable
                 onPress={() => handleContactPress(option.action)}
-                className="bg-white/5 rounded-xl p-4 mb-3"
+                style={{ backgroundColor: theme.surfaceHover }}
+                className="rounded-xl p-4 mb-3"
               >
                 <View className="flex-row items-center">
                   <View className="w-12 h-12 rounded-xl bg-indigo-500/20 items-center justify-center">
                     <Icon size={24} color="#6366F1" />
                   </View>
                   <View className="flex-1 ml-4">
-                    <Text className="text-white font-semibold">{option.title}</Text>
-                    <Text className="text-gray-400 text-sm mt-0.5">
+                    <Text style={{ color: theme.text }} className="font-semibold">{option.title}</Text>
+                    <Text style={{ color: theme.textSecondary }} className="text-sm mt-0.5">
                       {option.description}
                     </Text>
                   </View>
-                  <ExternalLink size={18} color="#6B7280" />
+                  <ExternalLink size={18} color={theme.textSecondary} />
                 </View>
               </Pressable>
             </Animated.View>
@@ -165,8 +165,8 @@ export default function HelpCenterScreen() {
 
         {/* App Version */}
         <View className="mt-8 items-center">
-          <Text className="text-gray-500 text-sm">Ledger v1.0.0</Text>
-          <Text className="text-gray-600 text-xs mt-1">Build 2026.01</Text>
+          <Text style={{ color: theme.textTertiary }} className="text-sm">Ledger v1.0.0</Text>
+          <Text style={{ color: theme.textTertiary }} className="text-xs mt-1">Build 2026.01</Text>
         </View>
       </ScrollView>
     </View>

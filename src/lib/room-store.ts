@@ -230,6 +230,21 @@ interface RoomState {
     reason?: string;
   };
 
+  // Log an account contribution "right now" (e.g., when a holding contribution is tagged as held in a registered account).
+  // This is intentionally separate from reminder logging so it doesn't affect reminder dedupe state.
+  logContributionNow: (params: {
+    accountType: RegisteredAccountType;
+    amount: number;
+    date: string;
+    notes?: string;
+  }) => {
+    ok: boolean;
+    appliedAmount: number;
+    wasCapped: boolean;
+    remainingAfter: number;
+    reason?: string;
+  };
+
   // Computed
   getContributionsForAccount: (accountType: RegisteredAccountType, taxYearId: string) => Contribution[];
   getTotalContributed: (accountType: RegisteredAccountType, taxYearId: string) => number;
@@ -353,6 +368,26 @@ export const useRoomStore = create<RoomState>()(
         }));
 
         return result;
+      },
+
+      logContributionNow: ({ accountType, amount, date, notes }) => {
+        const { jurisdictionProfile } = get();
+        if (!jurisdictionProfile) {
+          return { ok: false, appliedAmount: 0, wasCapped: false, remainingAfter: 0, reason: 'No jurisdiction profile set' };
+        }
+
+        const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
+        const currency = JURISDICTION_INFO[jurisdictionProfile.countryCode].currency;
+
+        return get().addContribution({
+          accountType,
+          taxYearId,
+          amount,
+          currency,
+          date,
+          source: 'manual',
+          notes: notes ?? 'Logged from holding contribution',
+        });
       },
 
       addContribution: (contributionData) => {

@@ -1,3 +1,7 @@
+/**
+ * Portfolio store (Zustand): holds assets/holdings and provides mutations for buys/contributions.
+ * Includes logic for consolidating listed positions and recording contribution-driven buys.
+ */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -80,7 +84,13 @@ interface PortfolioState {
   addAsset: (asset: Omit<Asset, 'id' | 'lastUpdated'>) => void;
   updateAsset: (id: string, updates: Partial<Asset>) => void;
   deleteAsset: (id: string) => void;
-  applyAssetContribution: (params: { assetId: string; amount: number; date: string }) => void;
+  applyAssetContribution: (params: {
+    assetId: string;
+    amount: number;
+    date: string;
+    occurrenceId?: string;
+    unitPriceOverride?: number;
+  }) => { ok: boolean; wasApplied: boolean; reason?: string };
   setPremium: (isPremium: boolean) => void;
   setCurrency: (currency: Currency) => void;
   resetStore: () => Promise<void>;
@@ -145,6 +155,7 @@ export const usePortfolioStore = create<PortfolioState>()(
                       currentPrice: assetData.currentPrice, // Update with latest price
                       lastUpdated: new Date().toISOString(),
                       // Preserve other fields that might have been updated
+                      heldIn: assetData.heldIn !== undefined ? assetData.heldIn : asset.heldIn,
                       sector: assetData.sector ?? asset.sector,
                       // Always infer for listed assets to avoid onboarding defaults skewing geo analytics.
                       country: inferredCountry ?? asset.country,
@@ -221,15 +232,29 @@ export const usePortfolioStore = create<PortfolioState>()(
         }));
       },
 
-      applyAssetContribution: ({ assetId, amount, date }) => {
+      applyAssetContribution: ({ assetId, amount, date, occurrenceId, unitPriceOverride }) => {
         const amt = Number(amount);
-        if (!Number.isFinite(amt) || amt <= 0) return;
+        if (__DEV__) {
+          console.debug(
+            `[Contribution] applyAssetContribution asset=${assetId} amount=${amt} occurrenceId=${occurrenceId} override=${unitPriceOverride}`
+          );
+        }
+        if (!Number.isFinite(amt) || amt <= 0) return { ok: false, wasApplied: false, reason: 'Invalid amount' };
 
         const asset = get().assets.find((a) => a.id === assetId);
-        if (!asset) return;
+        if (!asset) return { ok: false, wasApplied: false, reason: 'Asset not found' };
 
-        const unitPrice = Number(asset.currentPrice);
-        if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
+        // Prefer the latest price, but fall back to purchase price if market data is missing.
+        // This makes "Mark as done" work even when a quote provider fails.
+        const overridePrice = Number(unitPriceOverride);
+        const unitPrice = Number.isFinite(overridePrice) && overridePrice > 0
+          ? overridePrice
+          : Number.isFinite(Number(asset.currentPrice)) && Number(asset.currentPrice) > 0
+            ? Number(asset.currentPrice)
+            : Number(asset.purchasePrice);
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+          return { ok: false, wasApplied: false, reason: 'Missing price' };
+        }
 
         // Cash behaves like a "balance" (quantity is typically 1).
         if (asset.category === 'cash') {
@@ -251,18 +276,20 @@ export const usePortfolioStore = create<PortfolioState>()(
             purchasePrice: nextInvestedPerUnit,
             valueHistory: nextHistory,
           });
-          return;
+          return { ok: true, wasApplied: true };
         }
 
         // For "per-unit priced" assets, treat contribution as buying more units at current price.
         const addedQty = amt / unitPrice;
-        if (!Number.isFinite(addedQty) || addedQty <= 0) return;
+        if (!Number.isFinite(addedQty) || addedQty <= 0) return { ok: false, wasApplied: false, reason: 'Invalid computed quantity' };
 
         // If it's a listed asset with a ticker, record an explicit BUY transaction.
         if (isListedAsset(asset.category, asset.ticker)) {
           const existingTxns = toTxnFromLegacy(asset);
+          const stableId = occurrenceId ? `txn-recurring-${asset.id}-${occurrenceId}` : null;
+          if (stableId && existingTxns.some((t) => t.id === stableId)) return { ok: true, wasApplied: false };
           const newTxn: AssetTransaction = {
-            id: `txn-${Date.now()}`,
+            id: stableId ?? `txn-${Date.now()}`,
             type: 'BUY',
             date,
             quantity: addedQty,
@@ -279,7 +306,7 @@ export const usePortfolioStore = create<PortfolioState>()(
             purchasePrice: avgCost,
             purchaseDate: firstDate,
           });
-          return;
+          return { ok: true, wasApplied: true };
         }
 
         const prevQty = Math.max(0, Number(asset.quantity) || 0);
@@ -291,6 +318,7 @@ export const usePortfolioStore = create<PortfolioState>()(
           quantity: nextQty,
           purchasePrice: nextAvgCost,
         });
+        return { ok: true, wasApplied: true };
       },
 
       deleteAsset: (id) => {

@@ -10,12 +10,22 @@ import { X, ChevronDown, Calendar, Check, Search } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { usePortfolioStore } from '@/lib/store';
-import { AssetCategory, CountryCode, Currency, CATEGORY_INFO, COUNTRY_INFO } from '@/lib/types';
+import {
+  ACCOUNT_CONFIGS,
+  AssetCategory,
+  CountryCode,
+  Currency,
+  CATEGORY_INFO,
+  COUNTRY_INFO,
+  JurisdictionCode,
+  RegisteredAccountType,
+} from '@/lib/types';
 import { searchTicker } from '@/lib/market-data';
 import { cn } from '@/lib/cn';
 import * as Haptics from 'expo-haptics';
 import { PlatformPicker } from '@/components/PlatformPicker';
 import { useOnboardingStore } from '@/lib/onboarding-store';
+import { useRoomStore } from '@/lib/room-store';
 
 const CURRENCIES: { value: Currency; label: string; symbol: string }[] = [
   { value: 'USD', label: 'US Dollar', symbol: '$' },
@@ -159,6 +169,7 @@ export default function EditAssetScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const selectedCountry = useOnboardingStore((s) => s.selectedCountry);
+  const jurisdictionProfile = useRoomStore((s) => s.jurisdictionProfile);
 
   const assets = usePortfolioStore((s) => s.assets);
   const updateAsset = usePortfolioStore((s) => s.updateAsset);
@@ -179,6 +190,8 @@ export default function EditAssetScreen() {
   const [customPlatform, setCustomPlatform] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [address, setAddress] = React.useState('');
+  const [sector, setSector] = React.useState('');
+  const [heldIn, setHeldIn] = React.useState<RegisteredAccountType | null>(null);
   const [country, setCountry] = React.useState<CountryCode>(() => {
     const fallback = 'US';
     const code = (selectedCountry ?? fallback).toUpperCase();
@@ -218,6 +231,8 @@ export default function EditAssetScreen() {
       setPlatform(asset.platform || '');
       setNotes(asset.notes || '');
       setAddress(asset.address || '');
+      setSector(asset.sector || '');
+      setHeldIn((asset.heldIn ?? null) as RegisteredAccountType | null);
       if (asset.country) setCountry(asset.country);
       setCustomCountryName(asset.countryName || '');
 
@@ -256,6 +271,17 @@ export default function EditAssetScreen() {
 
   const formCopy = React.useMemo(() => getCategoryFormCopy(category), [category]);
 
+  const jurisdiction = React.useMemo<JurisdictionCode>(() => {
+    const fromProfile = jurisdictionProfile?.countryCode;
+    if (fromProfile) return fromProfile;
+    const code = (selectedCountry ?? 'US').toUpperCase();
+    return (code === 'CA' || code === 'US' || code === 'UK') ? (code as JurisdictionCode) : 'US';
+  }, [jurisdictionProfile?.countryCode, selectedCountry]);
+
+  const heldInOptions = React.useMemo(() => {
+    return ACCOUNT_CONFIGS.filter((c) => c.jurisdiction === jurisdiction);
+  }, [jurisdiction]);
+
   // Some categories behave like "single position" entries.
   React.useEffect(() => {
     if (!formCopy.hideQuantity) return;
@@ -291,24 +317,28 @@ export default function EditAssetScreen() {
     try {
       const result = await searchTicker(ticker.trim(), category, undefined, currency);
 
-      if (result.ok) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (result.ok) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-        if (result.data.currentPrice) {
-          setCurrentPrice(result.data.currentPrice.toString());
-        }
-        if (result.data.name && !name) {
-          setName(result.data.name);
-        }
-        if (result.data.currency) {
-          setCurrency(result.data.currency);
-        }
+          if (result.data.currentPrice) {
+            setCurrentPrice(result.data.currentPrice.toString());
+          }
+          if (result.data.name && !name) {
+            setName(result.data.name);
+          }
+          if (result.data.currency) {
+            setCurrency(result.data.currency);
+          }
+          if (result.data.sector) {
+            setSector(result.data.sector);
+          }
 
-        setTickerSearchError(null);
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setTickerSearchError(result.reason || 'Unable to fetch price data');
-      }
+          setTickerSearchError(null);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setTickerSearchError(result.reason || 'Unable to fetch price data');
+          setSector('');
+        }
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setTickerSearchError('Failed to search ticker');
@@ -367,6 +397,8 @@ export default function EditAssetScreen() {
           ? customCountryName.trim() || undefined
           : undefined,
       recurringContribution,
+      sector: sector.trim() || undefined,
+      heldIn,
     });
 
     router.back();
@@ -751,6 +783,53 @@ export default function EditAssetScreen() {
               customValue={customPlatform}
               onCustomValueChange={setCustomPlatform}
             />
+          </Animated.View>
+
+          {/* Held in (registered account) */}
+          <Animated.View entering={FadeInDown.delay(575)} className="mt-6">
+            <Text className="text-gray-400 text-sm mb-2">Held in (optional)</Text>
+            <Text className="text-gray-500 text-xs mb-3">
+              Tag this holding so Ledger can update your contribution room when you log contributions.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setHeldIn(null);
+                }}
+                className={cn(
+                  'px-4 py-2 rounded-full mr-2 border',
+                  heldIn === null ? 'bg-indigo-600/20 border-indigo-500/40' : 'bg-white/5 border-white/10'
+                )}
+              >
+                <Text className={cn('text-xs font-semibold', heldIn === null ? 'text-indigo-200' : 'text-gray-300')}>
+                  Taxable
+                </Text>
+              </Pressable>
+              {heldInOptions.map((opt) => (
+                <Pressable
+                  key={opt.type}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setHeldIn(opt.type);
+                  }}
+                  className={cn(
+                    'px-4 py-2 rounded-full mr-2 border',
+                    heldIn === opt.type ? 'border-white/20' : 'border-white/10'
+                  )}
+                  style={{
+                    backgroundColor: heldIn === opt.type ? `${opt.color}22` : 'rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: heldIn === opt.type ? opt.color : '#D1D5DB' }}
+                  >
+                    {opt.shortName}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </Animated.View>
 
           {/* Notes */}

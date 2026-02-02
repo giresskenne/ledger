@@ -17,10 +17,11 @@ import { formatCurrency } from '@/lib/formatters';
 import { ACCOUNT_CONFIGS } from '@/lib/types';
 import type { Asset, PayFrequency, RegisteredAccountType } from '@/lib/types';
 import { buildEstimatedAmortizationSchedule, isFixedIncomeAsset } from '@/lib/amortization';
+import { useAppRatingStore } from '@/lib/app-rating-store';
 
 type GeneratedEvent = Omit<PortfolioEvent, 'isRead' | 'createdAt'>;
 
-const GENERATED_PREFIXES = ['maturity_', 'contrib_', 'assetcontrib_', 'autopilot_', 'rebalance_'] as const;
+const GENERATED_PREFIXES = ['maturity_', 'contrib_', 'assetcontrib_', 'autopilot_', 'rebalance_', 'rateus_'] as const;
 
 export function isGeneratedEventId(id: string): boolean {
   return GENERATED_PREFIXES.some((prefix) => id.startsWith(prefix));
@@ -604,6 +605,29 @@ export function generateRebalanceEvent(params: {
   ];
 }
 
+export function generateRateUsEvent(params: {
+  shouldShowRatingPrompt: () => boolean;
+  hasRated: boolean;
+}): GeneratedEvent[] {
+  const { shouldShowRatingPrompt, hasRated } = params;
+
+  // Don't show notification if user has already rated or doesn't meet criteria
+  if (hasRated || !shouldShowRatingPrompt()) return [];
+
+  // Show notification tomorrow
+  const tomorrow = startOfTomorrow();
+
+  return [
+    {
+      id: 'rateus_reminder',
+      type: 'rate_us',
+      title: 'Enjoying Ledger?',
+      description: 'Help us grow by leaving a quick rating on the App Store. It takes just 30 seconds!',
+      date: tomorrow.toISOString(),
+    },
+  ];
+}
+
 export function generateGeneratedEvents(params: {
   assets: Asset[];
   enabledAccountTypes: RegisteredAccountType[];
@@ -619,6 +643,7 @@ export function generateGeneratedEvents(params: {
   taxYearId: string | null;
   riskSummary: { overallRiskScore: number; suggestions: string[] };
   notificationPrefs: { staleValuationReminders: boolean; staleValuationDays: number; amortizationAlerts: boolean };
+  ratingState: { shouldShowRatingPrompt: () => boolean; hasRated: boolean };
 }): GeneratedEvent[] {
   const maturity = generateMaturityEvents(params.assets);
   const assetContrib = generateAssetContributionEvents(params.assets);
@@ -661,7 +686,12 @@ export function generateGeneratedEvents(params: {
     hasAssets: params.assets.length > 0,
   });
 
-  return [...maturity, ...amortization, ...assetContrib, ...staleValuation, ...autopilot, ...contribution, ...rebalance];
+  const rateUs = generateRateUsEvent({
+    shouldShowRatingPrompt: params.ratingState.shouldShowRatingPrompt,
+    hasRated: params.ratingState.hasRated,
+  });
+
+  return [...maturity, ...amortization, ...assetContrib, ...staleValuation, ...autopilot, ...contribution, ...rebalance, ...rateUs];
 }
 
 export function useSyncGeneratedEvents(): () => void {
@@ -688,6 +718,9 @@ export function useSyncGeneratedEvents(): () => void {
   const syncGeneratedEvents = useNotificationsStore((s) => s.syncGeneratedEvents);
   const notificationPrefs = useNotificationsStore((s) => s.preferences);
 
+  const shouldShowRatingPrompt = useAppRatingStore((s) => s.shouldShowRatingPrompt);
+  const hasRated = useAppRatingStore((s) => s.hasRated);
+
   const taxYearId = React.useMemo(() => {
     if (!jurisdictionProfile) return null;
     return getCurrentTaxYearId(jurisdictionProfile.countryCode);
@@ -709,8 +742,9 @@ export function useSyncGeneratedEvents(): () => void {
         staleValuationDays: notificationPrefs.staleValuationDays,
         amortizationAlerts: notificationPrefs.amortizationAlerts,
       },
+      ratingState: { shouldShowRatingPrompt, hasRated },
     });
-  }, [assets, enabledAccountTypes, payFrequency, autopilotSchedules, contributionReminderLog, getSavingsTarget, currency, taxYearId, risk, notificationPrefs.staleValuationDays, notificationPrefs.staleValuationReminders, notificationPrefs.amortizationAlerts]);
+  }, [assets, enabledAccountTypes, payFrequency, autopilotSchedules, contributionReminderLog, getSavingsTarget, currency, taxYearId, risk, notificationPrefs.staleValuationDays, notificationPrefs.staleValuationReminders, notificationPrefs.amortizationAlerts, shouldShowRatingPrompt, hasRated]);
 
   // Apply auto-recurring contributions when due (best-effort; runs while app is open).
   React.useEffect(() => {
@@ -774,17 +808,22 @@ export function useSyncGeneratedEvents(): () => void {
         if (recurring.lastAppliedId === occurrenceId) continue;
       }
 
-      applyAssetContribution({
+      const applied = applyAssetContribution({
         assetId: asset.id,
         amount: recurring.amount,
         date: now.toISOString(),
+        occurrenceId,
       });
-      updateAsset(asset.id, {
-        recurringContribution: {
-          ...recurring,
-          lastAppliedId: occurrenceId,
-        },
-      });
+
+      // Only mark as applied if the contribution actually succeeded; otherwise we'd "lose" the reminder.
+      if (applied.ok) {
+        updateAsset(asset.id, {
+          recurringContribution: {
+            ...recurring,
+            lastAppliedId: occurrenceId,
+          },
+        });
+      }
     }
   }, [assets, applyAssetContribution, updateAsset]);
 

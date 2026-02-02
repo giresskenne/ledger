@@ -3,14 +3,16 @@
  * Keeps UI resilient across account types, including those without a standard contribution cap (e.g., 529).
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions, Modal, Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { TrendingUp, TrendingDown, ChevronRight, Sparkles, Bell, Eye, EyeOff, AlertTriangle, Globe, PieChart, Shield, Calendar, PiggyBank, RefreshCw, DollarSign } from 'lucide-react-native';
+import { TrendingUp, TrendingDown, ChevronRight, Sparkles, Bell, Eye, EyeOff, AlertTriangle, Globe, PieChart, Shield, Calendar, PiggyBank, RefreshCw, DollarSign, Star, X, MessageCircle } from 'lucide-react-native';
 import { PolarChart, Pie } from 'victory-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
+import * as Burnt from 'burnt';
 import { usePortfolioStore } from '@/lib/store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useRoomStore, getCurrentTaxYearId, getEffectiveAnnualLimit } from '@/lib/room-store';
@@ -24,6 +26,7 @@ import { useSyncGeneratedEvents } from '@/lib/events';
 import { useTheme } from '@/lib/theme-store';
 import { useUIPreferencesStore } from '@/lib/ui-preferences-store';
 import { usePortfolioFXRates } from '@/lib/portfolio-fx';
+import { useAppRatingStore } from '@/lib/app-rating-store';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -34,7 +37,26 @@ export default function DashboardScreen() {
   const hidePerformanceMetrics = useUIPreferencesStore((s) => s.hidePerformanceMetrics);
   const [isReady, setIsReady] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showRatingPrompt, setShowRatingPrompt] = useState(false);
   useSyncGeneratedEvents();
+
+  // Rating store
+  const shouldShowRatingPrompt = useAppRatingStore((s) => s.shouldShowRatingPrompt);
+  const markPromptShown = useAppRatingStore((s) => s.markPromptShown);
+  const markAsRated = useAppRatingStore((s) => s.markAsRated);
+  const markNeverAskAgain = useAppRatingStore((s) => s.markNeverAskAgain);
+
+  // Check if we should show rating prompt
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (shouldShowRatingPrompt()) {
+        setShowRatingPrompt(true);
+        markPromptShown();
+      }
+    }, 3000); // Wait 3 seconds after dashboard loads
+    
+    return () => clearTimeout(timer);
+  }, [shouldShowRatingPrompt, markPromptShown]);
 
   // Check onboarding status
   const hasCompletedOnboarding = useOnboardingStore((s) => s.hasCompletedOnboarding);
@@ -166,23 +188,51 @@ export default function DashboardScreen() {
   }, [assets, fx]);
 
   // Sector allocation
-  const sectorAllocation = React.useMemo(() => {
+  type SectorAllocationItem = {
+    code: string;
+    name: string;
+    value: number;
+    percentage: number;
+    color: string;
+    isHighRisk: boolean;
+  };
+
+  const sectorAllocation = React.useMemo<SectorAllocationItem[]>(() => {
     const totalValue = assets.reduce((sum, asset) => sum + fx.convert(asset.currentPrice * asset.quantity, asset.currency), 0);
     const sectorTotals: Record<string, number> = {};
+    const sectorMeta: Record<string, { name: string; color: string }> = {};
 
     assets.forEach((asset) => {
-      const sector = asset.sector || 'other';
       const value = fx.convert(asset.currentPrice * asset.quantity, asset.currency);
-      sectorTotals[sector] = (sectorTotals[sector] || 0) + value;
+      const explicitSector = asset.sector;
+      const fallbackKey = `category__${asset.category}`;
+      const key = explicitSector || fallbackKey;
+
+      sectorTotals[key] = (sectorTotals[key] || 0) + value;
+
+      if (!sectorMeta[key]) {
+        if (explicitSector) {
+          const info = SECTOR_INFO[explicitSector as Sector];
+          sectorMeta[key] = {
+            name: info?.label || explicitSector,
+            color: info?.color || '#6B7280',
+          };
+        } else {
+          sectorMeta[key] = {
+            name: CATEGORY_INFO[asset.category]?.label || asset.category,
+            color: CATEGORY_INFO[asset.category]?.color || '#6B7280',
+          };
+        }
+      }
     });
 
     return Object.entries(sectorTotals)
       .map(([code, value]) => ({
-        code: code as Sector,
-        name: SECTOR_INFO[code as Sector]?.label || code,
+        code,
+        name: sectorMeta[code]?.name || code,
         value,
         percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
-        color: SECTOR_INFO[code as Sector]?.color || '#6B7280',
+        color: sectorMeta[code]?.color || '#6B7280',
         isHighRisk: totalValue > 0 && (value / totalValue) * 100 > 40,
       }))
       .sort((a, b) => b.value - a.value)
@@ -604,7 +654,16 @@ export default function DashboardScreen() {
                 <Text style={{ color: theme.textSecondary }} className="mr-3">
                   {hideBalance ? '••••' : formatCurrency(item.value, selectedCurrency)}
                 </Text>
-                    <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: theme.text,
+                        fontWeight: '600',
+                        textAlign: 'right',
+                        minWidth: 48,
+                        flexShrink: 0,
+                      }}
+                    >
                       {item.percentage.toFixed(1)}%
                     </Text>
                   </Pressable>
@@ -652,7 +711,13 @@ export default function DashboardScreen() {
                               <Text className="text-white font-bold text-sm" numberOfLines={1}>
                                 {item.name}
                               </Text>
-                              <Text className="text-white/80 text-xs">{item.percentage.toFixed(0)}%</Text>
+                              <Text
+                                className="text-white/80 text-xs"
+                                numberOfLines={1}
+                                style={{ flexShrink: 0 }}
+                              >
+                                {item.percentage.toFixed(0)}%
+                              </Text>
                             </View>
                           </Pressable>
                         ))}
@@ -677,7 +742,13 @@ export default function DashboardScreen() {
                               <Text className="text-white font-bold text-xs" numberOfLines={1}>
                                 {item.name}
                               </Text>
-                              <Text className="text-white/80 text-[10px]">{item.percentage.toFixed(0)}%</Text>
+                              <Text
+                                className="text-white/80 text-[10px]"
+                                numberOfLines={1}
+                                style={{ flexShrink: 0 }}
+                              >
+                                {item.percentage.toFixed(0)}%
+                              </Text>
                             </View>
                           </Pressable>
                         ))}
@@ -704,7 +775,16 @@ export default function DashboardScreen() {
                     {item.isHighRisk && (
                       <AlertTriangle size={12} color="#EF4444" style={{ marginRight: 8 }} />
                     )}
-                    <Text style={{ color: theme.text }} className="font-medium w-14 text-right">
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: theme.text,
+                        fontWeight: '600',
+                        textAlign: 'right',
+                        minWidth: 48,
+                        flexShrink: 0,
+                      }}
+                    >
                       {item.percentage.toFixed(1)}%
                     </Text>
                   </Pressable>
@@ -973,6 +1053,157 @@ export default function DashboardScreen() {
         onClose={() => setShowPaywall(false)}
         feature="asset_limit"
       />
+
+      {/* Rating Prompt Modal */}
+      <Modal
+        visible={showRatingPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRatingPrompt(false)}
+      >
+        <View 
+          style={{ 
+            flex: 1, 
+            backgroundColor: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.85)',
+            justifyContent: 'center',
+            paddingHorizontal: 20,
+          }}
+        >
+          <Pressable 
+            style={{ 
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onPress={() => setShowRatingPrompt(false)}
+          />
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <Animated.View 
+              entering={FadeIn.duration(300)}
+              style={{
+                backgroundColor: theme.background,
+                borderRadius: 24,
+                padding: 24,
+                borderWidth: 1,
+                borderColor: theme.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 24,
+                elevation: 8,
+              }}
+            >
+              {/* Header */}
+              <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                <View style={{ 
+                  width: 64, 
+                  height: 64, 
+                  borderRadius: 32, 
+                  backgroundColor: '#F59E0B20',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 16,
+                }}>
+                  <Star size={32} color="#F59E0B" />
+                </View>
+                <Text style={{ color: theme.text, fontSize: 22, fontWeight: 'bold', textAlign: 'center' }}>
+                  Enjoying Ledger?
+                </Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 8 }}>
+                  Your feedback helps us improve and reach more investors like you
+                </Text>
+              </View>
+
+              {/* Buttons */}
+              <View style={{ gap: 12 }}>
+                {/* Rate Us */}
+                <Pressable
+                  onPress={() => {
+                    setShowRatingPrompt(false);
+                    markAsRated();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setTimeout(() => {
+                      const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/your-app-id';
+                      Linking.openURL(appStoreUrl).catch(() => {
+                        Burnt.toast({
+                          title: 'Unable to open App Store',
+                          preset: 'error',
+                        });
+                      });
+                    }, 300);
+                  }}
+                  style={{
+                    backgroundColor: theme.primary,
+                    borderRadius: 12,
+                    padding: 16,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>Rate on App Store</Text>
+                </Pressable>
+
+                {/* Send Feedback */}
+                <Pressable
+                  onPress={() => {
+                    setShowRatingPrompt(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setTimeout(() => {
+                      const feedbackUrl = process.env.EXPO_PUBLIC_FEEDBACK_URL || 'https://forms.gle/your-feedback-form';
+                      Linking.openURL(feedbackUrl).catch(() => {
+                        Burnt.toast({
+                          title: 'Unable to open feedback form',
+                          preset: 'error',
+                        });
+                      });
+                    }, 300);
+                  }}
+                  style={{
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 12,
+                    padding: 16,
+                    alignItems: 'center',
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Send Feedback</Text>
+                </Pressable>
+
+                {/* Not Now */}
+                <Pressable
+                  onPress={() => {
+                    setShowRatingPrompt(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={{
+                    padding: 12,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Not Now</Text>
+                </Pressable>
+
+                {/* Never Ask Again - Small text */}
+                <Pressable
+                  onPress={() => {
+                    setShowRatingPrompt(false);
+                    markNeverAskAgain();
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={{
+                    padding: 8,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: theme.textTertiary, fontSize: 12 }}>Don't ask again</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }

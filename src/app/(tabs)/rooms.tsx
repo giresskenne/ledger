@@ -86,6 +86,25 @@ export default function RoomTrackerScreen() {
 
   const accounts = useMemo(() => getAccountsForJurisdiction(), [jurisdictionProfile]);
 
+  // These hooks must be before any conditional returns
+  const taxYearId = jurisdictionProfile ? getCurrentTaxYearId(jurisdictionProfile.countryCode) : '';
+  const taxYearEnd = jurisdictionProfile ? getTaxYearEndDate(jurisdictionProfile.countryCode) : new Date();
+  const daysUntilEnd = Math.ceil((taxYearEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  const selectedAccountConfig = selectedAccount
+    ? ACCOUNT_CONFIGS.find((c) => c.type === selectedAccount)
+    : null;
+
+  const totalContributedThisYear = useMemo(() => {
+    if (!jurisdictionProfile) return 0;
+    return accounts.reduce((sum, cfg) => sum + getTotalContributed(cfg.type, taxYearId), 0);
+  }, [accounts, getTotalContributed, taxYearId, jurisdictionProfile]);
+
+  const remainingForSelected = useMemo(() => {
+    if (!selectedAccount || !jurisdictionProfile) return null;
+    return getRemainingRoomForTaxYear(selectedAccount, taxYearId);
+  }, [getRemainingRoomForTaxYear, selectedAccount, taxYearId, jurisdictionProfile]);
+
   const handleFrequencyChange = (frequency: PayFrequency) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPayFrequency(frequency);
@@ -349,23 +368,6 @@ export default function RoomTrackerScreen() {
       </View>
     );
   }
-
-  const taxYearId = getCurrentTaxYearId(jurisdictionProfile.countryCode);
-  const taxYearEnd = getTaxYearEndDate(jurisdictionProfile.countryCode);
-  const daysUntilEnd = Math.ceil((taxYearEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-  const selectedAccountConfig = selectedAccount
-    ? ACCOUNT_CONFIGS.find((c) => c.type === selectedAccount)
-    : null;
-
-  const totalContributedThisYear = useMemo(() => {
-    return accounts.reduce((sum, cfg) => sum + getTotalContributed(cfg.type, taxYearId), 0);
-  }, [accounts, getTotalContributed, taxYearId]);
-
-  const remainingForSelected = useMemo(() => {
-    if (!selectedAccount) return null;
-    return getRemainingRoomForTaxYear(selectedAccount, taxYearId);
-  }, [getRemainingRoomForTaxYear, selectedAccount, taxYearId]);
 
   return (
     <View className="flex-1 bg-[#0A0A0F]">
