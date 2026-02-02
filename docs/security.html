@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy & Security - Ledger Help</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8f9fa; color: #222; margin: 0; padding: 2em; }
+    h1, h2 { color: #10B981; }
+    .section { margin-bottom: 2em; }
+    .updated { color: #6B7280; font-size: 0.9em; margin-bottom: 1em; }
+    strong { color: #F59E0B; }
+    ul { margin-left: 1em; }
+    .security-feature { background: #10B98120; padding: 1em; border-radius: 8px; margin: 1em 0; border-left: 4px solid #10B981; }
+  </style>
+</head>
+<body>
+  <h1>Privacy & Security</h1>
+  <div class="updated">How we protect your financial data</div>
+  
+  <div class="section">
+    <h2>Privacy-First Design</h2>
+    <p>Ledger is built around one core principle: <strong>your financial data is yours alone</strong>. We've designed the app to be private by default, secure by design, and transparent in how we handle your information.</p>
+  </div>
+
+  <div class="section">
+    <h2>Key Security Features</h2>
+    
+    <div class="security-feature">
+      <strong>🔒 Local-First Storage</strong><br>
+      All your portfolio data—assets, quantities, purchase prices—is stored exclusively on your device. We never upload your financial details to our servers.
+    </div>
+
+    <div class="security-feature">
+      <strong>🔐 End-to-End Encryption</strong><br>
+      Premium users who enable cloud backup benefit from end-to-end encryption. Your data is encrypted on your device before upload, and only you have the decryption key.
+    </div>
+
+    <div class="security-feature">
+      <strong>👤 No Account Required</strong><br>
+      Use Ledger without creating an account, providing an email, or sharing personal information. Complete anonymity.
+    </div>
+
+    <div class="security-feature">
+      <strong>📱 Biometric Protection</strong><br>
+      Lock Ledger with Face ID or Touch ID. Your portfolio stays secure even if someone has your device.
+    </div>
+
+    <div class="security-feature">
+      <strong>🚫 Zero Third-Party Tracking</strong><br>
+      No advertising SDKs, no analytics trackers, no data brokers. We don't sell or share your information—period.
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>What Data We Collect</h2>
+    <p><strong>What we DO collect:</strong></p>
+    <ul>
+      <li>Minimal crash reports (device type, OS version, error logs)</li>
+      <li>Anonymous app usage statistics (feature adoption, not your holdings)</li>
+      <li>Ticker symbols when fetching market data (never linked to you)</li>
+    </ul>
+    
+    <p><strong>What we DON'T collect:</strong></p>
+    <ul>
+      <li>Your asset holdings, quantities, or purchase prices</li>
+      <li>Your net worth or portfolio value</li>
+      <li>Your name, email, phone number (unless you contact support)</li>
+      <li>Your location, contacts, or photos</li>
+      <li>Your browsing history or app activity outside Ledger</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Market Data Privacy</h2>
+    <p>When you add stocks or crypto with ticker symbols, Ledger fetches prices from public APIs (Stooq, Alpha Vantage). These requests include:</p>
+    <ul>
+      <li><strong>Ticker symbol only</strong> (e.g., "AAPL", "BTC")</li>
+      <li>No user identifiers</li>
+      <li>No quantity or value data</li>
+      <li>No personally identifiable information</li>
+    </ul>
+    <p>The API providers cannot tie these requests back to you or your portfolio.</p>
+  </div>
+
+  <div class="section">
+    <h2>Cloud Backup Security</h2>
+    <p><strong>Premium Feature:</strong> Optional encrypted cloud sync</p>
+    <p>How it works:</p>
+    <ol>
+      <li>Your portfolio data is encrypted on your device using AES-256</li>
+      <li>Only the encrypted blob is uploaded to secure cloud storage</li>
+      <li>The decryption key never leaves your device</li>
+      <li>We cannot read your data—only you can decrypt it</li>
+    </ol>
+    <p>Cloud backup requires iOS Keychain (backed by Apple's security) to sync encryption keys across your devices.</p>
+  </div>
+
+  <div class="section">
+    <h2>Best Security Practices</h2>
+    <ul>
+      <li><strong>Enable Face ID/Touch ID</strong> in Settings for app lock</li>
+      <li><strong>Export backups regularly</strong> to safeguard against device loss</li>
+      <li><strong>Use a strong device passcode</strong> (6+ digits, not easily guessable)</li>
+      <li><strong>Keep iOS updated</strong> for latest security patches</li>
+      <li><strong>Don't jailbreak</strong> your device—it weakens security protections</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Data Deletion</h2>
+    <p>You own your data. Delete it anytime:</p>
+    <ul>
+      <li><strong>Individual assets:</strong> Swipe left on any holding and tap Delete</li>
+      <li><strong>All data:</strong> Settings > Clear All Assets (Testing) - permanent deletion</li>
+      <li><strong>App removal:</strong> Uninstalling Ledger erases all local data</li>
+      <li><strong>Cloud backup:</strong> Deleted automatically when subscription ends</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Third-Party Services</h2>
+    <p>Ledger integrates with minimal third parties, each with their own privacy policies:</p>
+    <ul>
+      <li><strong>RevenueCat</strong> - Subscription management (App Store purchase data only)</li>
+      <li><strong>Stooq</strong> - Stock prices (ticker symbols only)</li>
+      <li><strong>Alpha Vantage</strong> - FX/crypto prices (ticker symbols only)</li>
+      <li><strong>OpenAI</strong> - Optional AI insights (anonymized portfolio summary, never raw data)</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Compliance</h2>
+    <p>Ledger complies with:</p>
+    <ul>
+      <li><strong>GDPR</strong> - European privacy regulations</li>
+      <li><strong>CCPA</strong> - California Consumer Privacy Act</li>
+      <li><strong>Apple App Store Guidelines</strong> - Privacy nutrition labels</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Security Audits</h2>
+    <p>We conduct regular security reviews and welcome responsible disclosure. If you discover a security vulnerability, please email <strong>contact.corpltd@gmail.com</strong> with details. We'll respond within 48 hours.</p>
+  </div>
+
+  <div class="section">
+    <h2>Questions?</h2>
+    <p>Read our full <a href="privacy.html">Privacy Policy</a> or contact <strong>contact.corpltd@gmail.com</strong> for security inquiries.</p>
+  </div>
+</body>
+</html>

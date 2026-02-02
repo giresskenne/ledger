@@ -3,26 +3,29 @@ import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
+import { useTheme } from '@/lib/theme-store';
 
 export default function TermsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Header */}
       <View
-        style={{ paddingTop: insets.top }}
-        className="px-5 pb-4 border-b border-white/10"
+        style={{ paddingTop: insets.top, borderBottomColor: theme.border }}
+        className="px-5 pb-4 border-b"
       >
         <View className="flex-row items-center">
           <Pressable
             onPress={() => router.back()}
-            className="w-10 h-10 bg-white/10 rounded-full items-center justify-center mr-3"
+            style={{ backgroundColor: theme.surface }}
+            className="w-10 h-10 rounded-full items-center justify-center mr-3"
           >
-            <ArrowLeft size={20} color="white" />
+            <ArrowLeft size={20} color={theme.text} />
           </Pressable>
-          <Text className="text-white text-xl font-bold">Terms of Service</Text>
+          <Text style={{ color: theme.text }} className="text-xl font-bold">Terms of Service</Text>
         </View>
       </View>
 
@@ -31,17 +34,17 @@ export default function TermsScreen() {
         contentContainerStyle={{ paddingVertical: 24, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-gray-400 text-sm mb-6">
+        <Text style={{ color: theme.textSecondary }} className="text-sm mb-6">
           Last updated: January 2025
         </Text>
 
-        <Section title="1. Acceptance of Terms">
+        <Section title="1. Acceptance of Terms" theme={theme}>
           By downloading, installing, or using Ledger ("the App"), you agree to
           be bound by these Terms of Service. If you do not agree to these
           terms, please do not use the App.
         </Section>
 
-        <Section title="2. Description of Service">
+        <Section title="2. Description of Service" theme={theme}>
           Ledger is a personal portfolio tracking application designed to help
           users monitor and organize their investments. The App allows you to:
           {'\n\n'}• Track stocks, bonds, crypto, real estate, and other assets
@@ -50,7 +53,7 @@ export default function TermsScreen() {
           {'\n'}• Access market data from third-party providers
         </Section>
 
-        <Section title="3. Not Financial Advice">
+        <Section title="3. Not Financial Advice" theme={theme}>
           <Text className="text-amber-400 font-semibold">
             IMPORTANT DISCLAIMER:{' '}
           </Text>
@@ -63,7 +66,7 @@ export default function TermsScreen() {
           results.
         </Section>
 
-        <Section title="4. User Responsibilities">
+        <Section title="4. User Responsibilities" theme={theme}>
           You are responsible for:
           {'\n\n'}• Maintaining the accuracy of data you enter
           {'\n'}• Keeping your account credentials secure
@@ -72,7 +75,7 @@ export default function TermsScreen() {
           decisions
         </Section>
 
-        <Section title="5. Data Accuracy">
+        <Section title="5. Data Accuracy" theme={theme}>
           Market data is provided by third-party services (Stooq, Alpha
           Vantage) and may be delayed or inaccurate. We make no warranties
           regarding the accuracy, completeness, or timeliness of market data.
@@ -80,7 +83,7 @@ export default function TermsScreen() {
           maintain and update.
         </Section>
 
-        <Section title="6. Subscription & Payments">
+        <Section title="6. Subscription & Payments" theme={theme}>
           Certain features require a Premium subscription. Subscription fees are
           billed through Apple App Store or Google Play Store. Refunds are
           subject to the respective store's policies.
@@ -88,36 +91,36 @@ export default function TermsScreen() {
           reasonable notice.
         </Section>
 
-        <Section title="7. Privacy">
+        <Section title="7. Privacy" theme={theme}>
           Your privacy is important to us. Please review our Privacy Policy to
           understand how we collect, use, and protect your information.
         </Section>
 
-        <Section title="8. Intellectual Property">
+        <Section title="8. Intellectual Property" theme={theme}>
           The App and its original content, features, and functionality are
           owned by Ledger and are protected by international copyright,
           trademark, and other intellectual property laws.
         </Section>
 
-        <Section title="9. Limitation of Liability">
+        <Section title="9. Limitation of Liability" theme={theme}>
           TO THE MAXIMUM EXTENT PERMITTED BY LAW, LEDGER SHALL NOT BE LIABLE FOR
           ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES,
           INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, OR INVESTMENT
           LOSSES.
         </Section>
 
-        <Section title="10. Modifications">
+        <Section title="10. Modifications" theme={theme}>
           We reserve the right to modify these Terms at any time. Continued use
           of the App after changes constitutes acceptance of the modified Terms.
         </Section>
 
-        <Section title="11. Termination">
+        <Section title="11. Termination" theme={theme}>
           We may terminate or suspend your access to the App immediately,
           without prior notice, for conduct that we believe violates these Terms
           or is harmful to other users.
         </Section>
 
-        <Section title="12. Contact">
+        <Section title="12. Contact" theme={theme}>
           For questions about these Terms, please contact us at:
           {'\n\n'}support@ledger-app.com
         </Section>
@@ -126,11 +129,11 @@ export default function TermsScreen() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, theme }: { title: string; children: React.ReactNode; theme: any }) {
   return (
     <View className="mb-6">
-      <Text className="text-white font-semibold text-base mb-3">{title}</Text>
-      <Text className="text-gray-400 leading-6">{children}</Text>
+      <Text style={{ color: theme.text }} className="font-semibold text-base mb-3">{title}</Text>
+      <Text style={{ color: theme.textSecondary }} className="leading-6">{children}</Text>
     </View>
   );
 }

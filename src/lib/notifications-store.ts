@@ -14,7 +14,8 @@ export type EventType =
   | 'price_alert'        // Price target reached
   | 'contribution_reminder' // Room contribution reminder
   | 'stale_valuation'    // Manual asset valuation is stale
-  | 'rebalance';         // Portfolio rebalance suggestion
+  | 'rebalance'          // Portfolio rebalance suggestion
+  | 'rate_us';           // Rate the app reminder
 
 export interface PortfolioEvent {
   id: string;
@@ -61,7 +62,7 @@ interface NotificationsState {
   setExpoPushToken: (token: string | null) => void;
 
   // Event management
-  addEvent: (event: Omit<PortfolioEvent, 'id' | 'isRead' | 'createdAt'>) => void;
+  addEvent: (event: Omit<PortfolioEvent, 'isRead' | 'createdAt'> & { id?: string }) => void;
   syncGeneratedEvents: (
     generated: Array<Omit<PortfolioEvent, 'isRead' | 'createdAt'>>
   ) => void;
@@ -108,9 +109,10 @@ export const useNotificationsStore = create<NotificationsState>()(
       },
 
       addEvent: (eventData) => {
+        const { id: providedId, ...rest } = eventData;
         const newEvent: PortfolioEvent = {
-          ...eventData,
-          id: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          ...rest,
+          id: providedId ?? `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           isRead: false,
           createdAt: new Date().toISOString(),
         };

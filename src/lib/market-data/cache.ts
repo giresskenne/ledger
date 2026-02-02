@@ -9,6 +9,7 @@ export const CACHE_DURATIONS = {
   historical: 24 * 60 * 60 * 1000, // 24 hours for historical data
   fx: 60 * 60 * 1000, // 1 hour for FX rates
   crypto: 5 * 60 * 1000, // 5 minutes for crypto (more volatile)
+  overview: 24 * 60 * 60 * 1000, // 24 hours for company overviews
 } as const;
 
 type CacheDuration = keyof typeof CACHE_DURATIONS;

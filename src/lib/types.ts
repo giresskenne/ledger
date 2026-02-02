@@ -135,7 +135,7 @@ export interface Asset {
   // `null`/`undefined` means "taxable / unregistered".
   heldIn?: RegisteredAccountType | null;
   // Sector and country for analytics
-  sector?: Sector;
+  sector?: Sector | string;
   country?: CountryCode;
   countryName?: string; // used when country === 'OTHER'
   // For fixed income / bonds

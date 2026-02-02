@@ -1,10 +1,12 @@
-import React from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, Pressable, Modal, Share, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Linking from 'expo-linking';
+import * as Burnt from 'burnt';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import {
   User,
   Settings,
@@ -17,6 +19,10 @@ import {
   Lock,
   CreditCard,
   Bell,
+  Star,
+  Share2,
+  X,
+  MessageCircle,
 } from 'lucide-react-native';
 import { useEntitlementStatus } from '@/lib/premium-store';
 import { useOnboardingStore } from '@/lib/onboarding-store';
@@ -33,10 +39,53 @@ export default function MoreScreen() {
   useSyncGeneratedEvents();
   const unreadEventsCount = useNotificationsStore((s) => s.getUnreadCount());
   const registeredAccountsEnabled = useOnboardingStore((s) => s.registeredAccountsEnabled);
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
 
   const handlePress = (route: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(route as any);
+  };
+
+  const handleFeedbackOption = (option: 'great' | 'okay' | 'notgood') => {
+    setFeedbackModalVisible(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    setTimeout(() => {
+      if (option === 'great') {
+        // Open App Store review page
+        const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/your-app-id';
+        Linking.openURL(appStoreUrl).catch(() => {
+          Burnt.toast({
+            title: 'Unable to open App Store',
+            preset: 'error',
+          });
+        });
+      } else {
+        // Open feedback form for "okay" or "not good"
+        const feedbackUrl = process.env.EXPO_PUBLIC_FEEDBACK_URL || 'https://forms.gle/your-feedback-form';
+        Linking.openURL(feedbackUrl).catch(() => {
+          Burnt.toast({
+            title: 'Unable to open feedback form',
+            preset: 'error',
+          });
+        });
+      }
+    }, 300);
+  };
+
+  const handleReferFriend = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/ledger';
+      const message = `I've been using Ledger to track my net worth and it's amazing! Private, simple, and powerful. Check it out: ${appStoreUrl}`;
+      
+      await Share.share({
+        message,
+        url: appStoreUrl,
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
   };
 
   return (
@@ -258,6 +307,39 @@ export default function MoreScreen() {
             className="rounded-2xl overflow-hidden"
             style={{ backgroundColor: theme.surface }}
           >
+            {/* Rate & Feedback */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFeedbackModalVisible(true);
+              }}
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
+            >
+              <View className="w-9 h-9 rounded-full bg-amber-500/20 items-center justify-center">
+                <Star size={20} color="#F59E0B" />
+              </View>
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Rate & Feedback
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
+            </Pressable>
+
+            {/* Refer a Friend */}
+            <Pressable
+              onPress={handleReferFriend}
+              className="flex-row items-center p-4 border-b"
+              style={{ borderBottomColor: theme.borderLight }}
+            >
+              <View className="w-9 h-9 rounded-full bg-green-500/20 items-center justify-center">
+                <Share2 size={20} color="#10B981" />
+              </View>
+              <Text style={{ color: theme.text }} className="flex-1 ml-3">
+                Refer a Friend
+              </Text>
+              <ChevronRight size={18} color={theme.textTertiary} />
+            </Pressable>
+
             {/* Help */}
             <Pressable
               onPress={() => handlePress('/help-center')}
@@ -294,6 +376,173 @@ export default function MoreScreen() {
           </Animated.View>
         </View>
       </ScrollView>
+
+      {/* Feedback Modal */}
+      <Modal
+        visible={feedbackModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFeedbackModalVisible(false)}
+      >
+        <View 
+          style={{ 
+            flex: 1, 
+            backgroundColor: theme.isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.85)',
+            justifyContent: 'center',
+            paddingHorizontal: 20,
+          }}
+        >
+          <Pressable 
+            style={{ 
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onPress={() => setFeedbackModalVisible(false)}
+          />
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <Animated.View 
+              entering={FadeIn.duration(200)}
+              style={{
+                backgroundColor: theme.background,
+                borderRadius: 24,
+                padding: 24,
+                borderWidth: 1,
+                borderColor: theme.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 24,
+                elevation: 8,
+              }}
+            >
+              {/* Header */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ color: theme.text, fontSize: 22, fontWeight: 'bold' }}>
+                  How was your experience?
+                </Text>
+                <Pressable 
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setFeedbackModalVisible(false);
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <X size={24} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+
+              {/* Options */}
+              <View style={{ gap: 12, marginTop: 20 }}>
+                {/* Great */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('great')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#10B98120',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😊</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Great</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Leave a quick rating</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+
+                {/* Okay */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('okay')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#F59E0B20',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😐</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Okay</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Tell us what to improve</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+
+                {/* Not good */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('notgood')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: '#EF444450',
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#EF444420',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😔</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Not good</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Get support</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+
+              {/* Footer */}
+              <Text style={{ 
+                color: theme.textTertiary, 
+                fontSize: 12, 
+                textAlign: 'center',
+                marginTop: 16,
+              }}>
+                We'll never block connectivity for reviews.
+              </Text>
+            </Animated.View>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }

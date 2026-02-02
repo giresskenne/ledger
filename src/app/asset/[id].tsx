@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Alert, Dimensions, TextInput, Modal,
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTheme } from '@/lib/theme-store';
 import {
   ArrowLeft,
   TrendingUp,
@@ -44,6 +45,7 @@ export default function AssetDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { theme, isDark } = useTheme();
   const [showPriceModal, setShowPriceModal] = React.useState(false);
   const [newPrice, setNewPrice] = React.useState('');
   const [showHistoryModal, setShowHistoryModal] = React.useState(false);
@@ -89,8 +91,8 @@ export default function AssetDetailScreen() {
 
   if (!asset) {
     return (
-      <View className="flex-1 bg-[#0A0A0F] items-center justify-center">
-        <Text className="text-gray-400">Asset not found</Text>
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
+        <Text style={{ color: theme.textSecondary }}>Asset not found</Text>
         <Pressable onPress={() => router.back()} className="mt-4">
           <Text className="text-indigo-400">Go back</Text>
         </Pressable>
@@ -288,9 +290,9 @@ export default function AssetDetailScreen() {
   };
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <LinearGradient
-        colors={[categoryInfo.color + '30', '#0A0A0F']}
+        colors={[categoryInfo.color + '30', theme.background]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350 }}
       />
 
@@ -301,20 +303,23 @@ export default function AssetDetailScreen() {
       >
         <Pressable
           onPress={() => router.back()}
-          className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
+          className="w-10 h-10 rounded-full items-center justify-center"
+          style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}
         >
-          <ArrowLeft size={20} color="white" />
+          <ArrowLeft size={20} color={theme.text} />
         </Pressable>
         <View className="flex-row gap-2">
           <Pressable
             onPress={() => router.push(`/edit-asset/${id}`)}
-            className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
+            className="w-10 h-10 rounded-full items-center justify-center"
+            style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}
           >
-            <Edit3 size={18} color="white" />
+            <Edit3 size={18} color={theme.text} />
           </Pressable>
           <Pressable
             onPress={handleDelete}
-            className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
+            className="w-10 h-10 rounded-full items-center justify-center"
+            style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}
           >
             <Trash2 size={18} color="#EF4444" />
           </Pressable>
@@ -337,12 +342,12 @@ export default function AssetDetailScreen() {
             </Text>
           </View>
 
-          <Text className="text-white text-2xl font-bold text-center">{asset.name}</Text>
+          <Text className="text-2xl font-bold text-center" style={{ color: theme.text }}>{asset.name}</Text>
 
           <View className="flex-row items-center mt-2">
             {asset.ticker && (
-              <View className="bg-white/10 px-3 py-1 rounded-full mr-2">
-                <Text className="text-gray-300">{asset.ticker}</Text>
+              <View className="px-3 py-1 rounded-full mr-2" style={{ backgroundColor: theme.surface }}>
+                <Text style={{ color: theme.textSecondary }}>{asset.ticker}</Text>
               </View>
             )}
             <View
@@ -367,8 +372,8 @@ export default function AssetDetailScreen() {
             colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
             style={{ borderRadius: 20, padding: 20 }}
           >
-            <Text className="text-gray-400 text-sm">Current Value</Text>
-            <Text className="text-white text-4xl font-bold mt-1">{formatCurrency(value)}</Text>
+            <Text className="text-sm" style={{ color: theme.textSecondary }}>Current Value</Text>
+            <Text className="text-4xl font-bold mt-1" style={{ color: theme.text }}>{formatCurrency(value)}</Text>
 
             <View className="flex-row items-center mt-4">
               {isPositive ? (
@@ -408,9 +413,9 @@ export default function AssetDetailScreen() {
 
         {/* Details Section */}
         <Animated.View entering={FadeInDown.delay(550)} className="px-5 mt-8">
-          <Text className="text-white text-lg font-semibold mb-4">Details</Text>
+          <Text className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Details</Text>
 
-          <View className="bg-white/5 rounded-2xl overflow-hidden">
+          <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surfaceHover }}>
             <DetailRow
               icon={<Calendar size={18} color="#6366F1" />}
               label="Purchase Date"
@@ -450,7 +455,7 @@ export default function AssetDetailScreen() {
             )}
 
             <DetailRow
-              icon={<RefreshCw size={18} color="#9CA3AF" />}
+              icon={<RefreshCw size={18} color={theme.textSecondary} />}
               label="Last Updated"
               value={formatDate(asset.lastUpdated)}
               isLast={!showListedHistory}
@@ -458,12 +463,12 @@ export default function AssetDetailScreen() {
             {showListedHistory && (
               <>
                 <DetailRow
-                  icon={<Globe size={18} color="#9CA3AF" />}
+                  icon={<Globe size={18} color={theme.textSecondary} />}
                   label="Price Source"
                   value={priceData.provider === 'manual' ? 'Manual' : priceData.provider === 'stooq' ? 'Stooq' : 'Alpha Vantage'}
                 />
                 <DetailRow
-                  icon={<Clock size={18} color="#9CA3AF" />}
+                  icon={<Clock size={18} color={theme.textSecondary} />}
                   label="Quote Updated"
                   value={updatedLabel ? updatedLabel : '—'}
                   isLast
@@ -476,8 +481,8 @@ export default function AssetDetailScreen() {
         {/* Fixed income schedule */}
         {isFixedIncome && (
           <Animated.View entering={FadeInDown.delay(600)} className="px-5 mt-8">
-            <Text className="text-white text-lg font-semibold mb-4">Amortization Schedule</Text>
-            <View className="bg-white/5 rounded-2xl p-4">
+            <Text className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Amortization Schedule</Text>
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
               {schedule ? (
                 <>
                   <View className="flex-row">
@@ -497,14 +502,14 @@ export default function AssetDetailScreen() {
 
                   <View className="flex-row mt-4">
                     <View className="flex-1">
-                      <Text className="text-gray-400 text-xs">Avg. Monthly Payment</Text>
-                      <Text className="text-white font-semibold mt-1">
+                      <Text className="text-xs" style={{ color: theme.textSecondary }}>Avg. Monthly Payment</Text>
+                      <Text className="font-semibold mt-1" style={{ color: theme.text }}>
                         {formatCurrency(schedule.monthlyAvgPayment, asset.currency)}
                       </Text>
                     </View>
                     <View className="flex-1 items-end">
-                      <Text className="text-gray-400 text-xs">Matures</Text>
-                      <Text className="text-white font-semibold mt-1">
+                      <Text className="text-xs" style={{ color: theme.textSecondary }}>Matures</Text>
+                      <Text className="font-semibold mt-1" style={{ color: theme.text }}>
                         {formatDate(schedule.maturity.toISOString())}
                       </Text>
                     </View>
@@ -515,17 +520,18 @@ export default function AssetDetailScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setShowScheduleModal(true);
                     }}
-                    className="mt-5 bg-white/10 rounded-xl py-3 items-center"
+                    className="mt-5 rounded-xl py-3 items-center"
+                    style={{ backgroundColor: theme.surface }}
                   >
-                    <Text className="text-white font-semibold">View schedule</Text>
+                    <Text className="font-semibold" style={{ color: theme.text }}>View schedule</Text>
                   </Pressable>
 
-                  <Text className="text-gray-500 text-xs mt-3 leading-5">
+                  <Text className="text-xs mt-3 leading-5" style={{ color: theme.textTertiary }}>
                     Estimate assumes equal monthly principal payments and interest accruing monthly.
                   </Text>
                 </>
               ) : (
-                <Text className="text-gray-400 leading-6">
+                <Text className="leading-6" style={{ color: theme.textSecondary }}>
                   Add a maturity date and interest rate to see an estimated schedule.
                 </Text>
               )}
@@ -536,11 +542,11 @@ export default function AssetDetailScreen() {
         {/* Notes Section */}
         {asset.notes && (
           <Animated.View entering={FadeInDown.delay(600)} className="px-5 mt-8">
-            <Text className="text-white text-lg font-semibold mb-4">Notes</Text>
-            <View className="bg-white/5 rounded-2xl p-4">
+            <Text className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Notes</Text>
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
               <View className="flex-row items-start">
-                <FileText size={18} color="#9CA3AF" />
-                <Text className="text-gray-300 ml-3 flex-1 leading-6">{asset.notes}</Text>
+                <FileText size={18} color={theme.textSecondary} />
+                <Text className="ml-3 flex-1 leading-6" style={{ color: theme.textSecondary }}>{asset.notes}</Text>
               </View>
             </View>
           </Animated.View>
@@ -549,7 +555,7 @@ export default function AssetDetailScreen() {
         {/* Performance Metrics */}
         {!hidePerformanceMetrics && (
           <Animated.View entering={FadeInDown.delay(650)} className="px-5 mt-8">
-            <Text className="text-white text-lg font-semibold mb-4">Performance</Text>
+            <Text className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Performance</Text>
 
             {/* Time period selector */}
             <View className="flex-row mb-3">
@@ -560,12 +566,10 @@ export default function AssetDetailScreen() {
                     Haptics.selectionAsync();
                     setPerfRange(r);
                   }}
-                  className={cn(
-                    'px-3 py-2 rounded-full mr-2',
-                    perfRange === r ? 'bg-indigo-600' : 'bg-white/10'
-                  )}
+                  className="px-3 py-2 rounded-full mr-2"
+                  style={{ backgroundColor: perfRange === r ? '#6366F1' : theme.surface }}
                 >
-                  <Text className={cn('text-xs font-semibold', perfRange === r ? 'text-white' : 'text-gray-300')}>
+                  <Text className="text-xs font-semibold" style={{ color: perfRange === r ? '#FFFFFF' : theme.textSecondary }}>
                     {r === 'INCEPTION' ? 'Since' : r}
                   </Text>
                 </Pressable>
@@ -579,12 +583,10 @@ export default function AssetDetailScreen() {
                   Haptics.selectionAsync();
                   setPerfShowPercent(false);
                 }}
-                className={cn(
-                  'flex-1 py-3 rounded-xl items-center justify-center mr-2',
-                  !perfShowPercent ? 'bg-white/15' : 'bg-white/5'
-                )}
+                className="flex-1 py-3 rounded-xl items-center justify-center mr-2"
+                style={{ backgroundColor: !perfShowPercent ? theme.surface : theme.surfaceHover }}
               >
-                <Text className={cn('text-sm font-semibold', !perfShowPercent ? 'text-white' : 'text-gray-400')}>
+                <Text className="text-sm font-semibold" style={{ color: !perfShowPercent ? theme.text : theme.textSecondary }}>
                   Amount
                 </Text>
               </Pressable>
@@ -593,20 +595,18 @@ export default function AssetDetailScreen() {
                   Haptics.selectionAsync();
                   setPerfShowPercent(true);
                 }}
-                className={cn(
-                  'flex-1 py-3 rounded-xl items-center justify-center ml-2',
-                  perfShowPercent ? 'bg-white/15' : 'bg-white/5'
-                )}
+                className="flex-1 py-3 rounded-xl items-center justify-center ml-2"
+                style={{ backgroundColor: perfShowPercent ? theme.surface : theme.surfaceHover }}
               >
-                <Text className={cn('text-sm font-semibold', perfShowPercent ? 'text-white' : 'text-gray-400')}>
+                <Text className="text-sm font-semibold" style={{ color: perfShowPercent ? theme.text : theme.textSecondary }}>
                   %
                 </Text>
               </Pressable>
             </View>
 
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
               <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-gray-400">{computedPerformance.label}</Text>
+                <Text style={{ color: theme.textSecondary }}>{computedPerformance.label}</Text>
                 <Text
                   style={{
                     color: getGainColor(perfShowPercent ? computedPerformance.pct : computedPerformance.abs),
@@ -629,7 +629,7 @@ export default function AssetDetailScreen() {
                       : 'No history available for this period yet.'}
               </Text>
 
-              <View className="h-3 rounded-full bg-black/30 overflow-hidden mt-4">
+              <View className="h-3 rounded-full overflow-hidden mt-4" style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}>
                 <View
                   className="h-full rounded-full"
                   style={{
@@ -640,10 +640,10 @@ export default function AssetDetailScreen() {
               </View>
 
               <View className="flex-row justify-between mt-2">
-                <Text className="text-gray-500 text-xs">
+                <Text className="text-xs" style={{ color: theme.textTertiary }}>
                   Start: {formatCurrency(computedPerformance.startPricePerUnit)}
                 </Text>
-                <Text className="text-gray-500 text-xs">
+                <Text className="text-xs" style={{ color: theme.textTertiary }}>
                   Now: {formatCurrency(computedPerformance.endPricePerUnit)}
                 </Text>
               </View>
@@ -655,21 +655,21 @@ export default function AssetDetailScreen() {
         {!hidePerformanceMetrics && showListedHistory && (
           <Animated.View entering={FadeInDown.delay(700)} className="px-5 mt-8">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-white text-lg font-semibold">Price History</Text>
+              <Text className="text-lg font-semibold" style={{ color: theme.text }}>Price History</Text>
               {marketStatus && (
-                <View className={cn('px-3 py-1 rounded-full', marketStatus.isOpen ? 'bg-emerald-500/15' : 'bg-white/10')}>
-                  <Text className={cn('text-xs font-semibold', marketStatus.isOpen ? 'text-emerald-400' : 'text-gray-300')}>
+                <View className="px-3 py-1 rounded-full" style={{ backgroundColor: marketStatus.isOpen ? 'rgba(16, 185, 129, 0.15)' : theme.surface }}>
+                  <Text className="text-xs font-semibold" style={{ color: marketStatus.isOpen ? '#10B981' : theme.textSecondary }}>
                     {marketStatus.statusLabel}
                   </Text>
                 </View>
               )}
             </View>
 
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
               {listedHistorical.isLoading ? (
                 <View className="py-10 items-center justify-center">
                   <ActivityIndicator color="#6366F1" />
-                  <Text className="text-gray-500 text-xs mt-3">Loading market history…</Text>
+                  <Text className="text-xs mt-3" style={{ color: theme.textTertiary }}>Loading market history…</Text>
                 </View>
               ) : listedHistorical.data?.ok && listedChartPoints.length > 1 ? (
                 <SimpleLineChart data={listedChartPoints} color={categoryInfo.color} currency={asset.currency} />
@@ -686,7 +686,7 @@ export default function AssetDetailScreen() {
             </View>
 
             {marketStatus?.detailLabel && (
-              <Text className="text-gray-500 text-xs mt-2">
+              <Text className="text-xs mt-2" style={{ color: theme.textTertiary }}>
                 {marketStatus.detailLabel}
               </Text>
             )}
@@ -697,26 +697,27 @@ export default function AssetDetailScreen() {
         {!hidePerformanceMetrics && asset.valueHistory && asset.valueHistory.length > 0 && (
           <Animated.View entering={FadeInDown.delay(720)} className="px-5 mt-8">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-white text-lg font-semibold">Value History</Text>
+              <Text className="text-lg font-semibold" style={{ color: theme.text }}>Value History</Text>
               <Pressable
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setShowHistoryModal(true);
                 }}
-                className="px-3 py-2 rounded-full bg-white/10"
+                className="px-3 py-2 rounded-full"
+                style={{ backgroundColor: theme.surface }}
               >
-                <Text className="text-gray-300 text-xs font-semibold">Manage</Text>
+                <Text className="text-xs font-semibold" style={{ color: theme.textSecondary }}>Manage</Text>
               </Pressable>
             </View>
-            <View className="bg-white/5 rounded-2xl p-4">
+            <View className="rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
               {asset.valueHistory.length > 1 ? (
                 <SimpleLineChart data={asset.valueHistory} color={categoryInfo.color} currency={asset.currency} />
               ) : (
                 <View>
-                  <Text className="text-gray-400">
+                  <Text style={{ color: theme.textSecondary }}>
                     Add another valuation update to see a chart.
                   </Text>
-                  <Text className="text-gray-500 text-xs mt-2">
+                  <Text className="text-xs mt-2" style={{ color: theme.textTertiary }}>
                     Tip: tap “Update Price” after you re-value this asset.
                   </Text>
                 </View>
@@ -728,16 +729,16 @@ export default function AssetDetailScreen() {
         {/* Asset Info (Country/Sector) */}
         {(asset.country || asset.sector) && (
           <Animated.View entering={FadeInDown.delay(750)} className="px-5 mt-8">
-            <Text className="text-white text-lg font-semibold mb-4">Asset Info</Text>
-            <View className="bg-white/5 rounded-2xl overflow-hidden">
+            <Text className="text-lg font-semibold mb-4" style={{ color: theme.text }}>Asset Info</Text>
+            <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surfaceHover }}>
               {asset.country && (
-                <View className="flex-row items-center p-4 border-b border-white/5">
+                <View className="flex-row items-center p-4" style={{ borderBottomWidth: 1, borderBottomColor: theme.border }}>
                   <Globe size={18} color="#EC4899" />
-                  <Text className="text-gray-400 ml-3 flex-1">Country</Text>
+                  <Text className="ml-3 flex-1" style={{ color: theme.textSecondary }}>Country</Text>
                   <Text className="text-lg mr-2">
                     {COUNTRY_INFO[asset.country as CountryCode]?.flag || '🏳️'}
                   </Text>
-                  <Text className="text-white">
+                  <Text style={{ color: theme.text }}>
                     {asset.country === 'OTHER'
                       ? asset.countryName || 'Other'
                       : COUNTRY_INFO[asset.country as CountryCode]?.name || asset.country}
@@ -747,12 +748,12 @@ export default function AssetDetailScreen() {
               {asset.sector && (
                 <View className="flex-row items-center p-4">
                   <Briefcase size={18} color="#6366F1" />
-                  <Text className="text-gray-400 ml-3 flex-1">Sector</Text>
+                  <Text className="ml-3 flex-1" style={{ color: theme.textSecondary }}>Sector</Text>
                   <View
                     className="w-3 h-3 rounded-full mr-2"
                     style={{ backgroundColor: SECTOR_INFO[asset.sector as Sector]?.color || '#6B7280' }}
                   />
-                  <Text className="text-white">
+                  <Text style={{ color: theme.text }}>
                     {SECTOR_INFO[asset.sector as Sector]?.label || asset.sector}
                   </Text>
                 </View>
@@ -770,7 +771,7 @@ export default function AssetDetailScreen() {
                 <StatusIndicator
                   status={priceData.provider === 'manual' ? 'manual' : priceData.isFresh ? 'fresh' : 'stale'}
                 />
-                <Text className="text-gray-500 text-xs ml-2">
+                <Text className="text-xs ml-2" style={{ color: theme.textTertiary }}>
                   {priceData.provider === 'manual'
                     ? 'Manual price entry'
                     : priceData.isFresh
@@ -780,7 +781,7 @@ export default function AssetDetailScreen() {
                 </Text>
               </View>
               {marketStatus && priceData.provider !== 'manual' && (
-                <Text className="text-gray-600 text-[11px] mt-1">
+                <Text className="text-[11px] mt-1" style={{ color: theme.textTertiary }}>
                   {marketStatus.statusLabel} • {marketStatus.detailLabel}
                 </Text>
               )}
@@ -795,10 +796,11 @@ export default function AssetDetailScreen() {
             </Pressable>
             <Pressable
               onPress={handleViewChart}
-              className="flex-1 bg-white/10 rounded-2xl p-4 items-center flex-row justify-center"
+              className="flex-1 rounded-2xl p-4 items-center flex-row justify-center"
+              style={{ backgroundColor: theme.surface }}
             >
-              <ExternalLink size={16} color="white" />
-              <Text className="text-white font-semibold ml-2">Open chart</Text>
+              <ExternalLink size={16} color={theme.text} />
+              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Open chart</Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -811,24 +813,25 @@ export default function AssetDetailScreen() {
           onRequestClose={() => setShowPriceModal(false)}
         >
           <View className="flex-1 bg-black/70 items-center justify-center px-5">
-            <View className="bg-[#1a1a2e] rounded-3xl p-6 w-full max-w-sm">
+            <View className="rounded-3xl p-6 w-full max-w-sm" style={{ backgroundColor: theme.surface }}>
               <View className="flex-row items-center justify-between mb-6">
-                <Text className="text-white text-xl font-bold">Update Price</Text>
+                <Text className="text-xl font-bold" style={{ color: theme.text }}>Update Price</Text>
                 <Pressable onPress={() => setShowPriceModal(false)}>
-                  <X size={24} color="#9CA3AF" />
+                  <X size={24} color={theme.textSecondary} />
                 </Pressable>
               </View>
 
-              <Text className="text-gray-400 mb-2">New price for {asset.name}</Text>
-              <View className="bg-white/10 rounded-xl px-4 py-3 flex-row items-center">
-                <Text className="text-gray-400 text-lg mr-2">$</Text>
+              <Text className="mb-2" style={{ color: theme.textSecondary }}>New price for {asset.name}</Text>
+              <View className="rounded-xl px-4 py-3 flex-row items-center" style={{ backgroundColor: theme.surfaceHover }}>
+                <Text className="text-lg mr-2" style={{ color: theme.textSecondary }}>$</Text>
                 <TextInput
                   value={newPrice}
                   onChangeText={setNewPrice}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
-                  placeholderTextColor="#6B7280"
-                  className="flex-1 text-white text-xl"
+                  placeholderTextColor={theme.textTertiary}
+                  className="flex-1 text-xl"
+                  style={{ color: theme.text }}
                   autoFocus
                 />
               </View>
@@ -836,9 +839,10 @@ export default function AssetDetailScreen() {
               <View className="flex-row gap-3 mt-6">
                 <Pressable
                   onPress={() => setShowPriceModal(false)}
-                  className="flex-1 bg-white/10 rounded-xl py-3 items-center"
+                  className="flex-1 rounded-xl py-3 items-center"
+                  style={{ backgroundColor: theme.surfaceHover }}
                 >
-                  <Text className="text-gray-300 font-semibold">Cancel</Text>
+                  <Text className="font-semibold" style={{ color: theme.textSecondary }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   onPress={handleSavePrice}
@@ -859,49 +863,50 @@ export default function AssetDetailScreen() {
           onRequestClose={() => setShowScheduleModal(false)}
         >
           <View className="flex-1 bg-black/80 items-center justify-center px-6">
-            <View className="w-full bg-[#111827] rounded-2xl p-5">
+            <View className="w-full rounded-2xl p-5" style={{ backgroundColor: theme.surface }}>
               <View className="flex-row items-center justify-between">
-                <Text className="text-white text-lg font-bold">Schedule</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Schedule</Text>
                 <Pressable
                   onPress={() => setShowScheduleModal(false)}
                   className="w-9 h-9 items-center justify-center"
                 >
-                  <X size={20} color="#9CA3AF" />
+                  <X size={20} color={theme.textSecondary} />
                 </Pressable>
               </View>
 
               {!schedule ? (
-                <Text className="text-gray-400 mt-4">No schedule available.</Text>
+                <Text className="mt-4" style={{ color: theme.textSecondary }}>No schedule available.</Text>
               ) : (
                 <ScrollView className="mt-4" style={{ maxHeight: 420 }}>
                   {schedule.rows.map((row, idx) => (
                     <View
                       key={`${row.date}-${idx}`}
-                      className={cn('py-3', idx > 0 && 'border-t border-white/10')}
+                      className="py-3"
+                      style={idx > 0 ? { borderTopWidth: 1, borderTopColor: theme.border } : {}}
                     >
                       <View className="flex-row items-center justify-between">
-                        <Text className="text-white font-semibold">{formatDate(row.date)}</Text>
-                        <Text className="text-gray-300">
+                        <Text className="font-semibold" style={{ color: theme.text }}>{formatDate(row.date)}</Text>
+                        <Text style={{ color: theme.textSecondary }}>
                           {formatCurrency(row.totalPayment, asset.currency)}
                         </Text>
                       </View>
 
                       <View className="flex-row mt-2">
                         <View className="flex-1">
-                          <Text className="text-gray-500 text-xs">Principal</Text>
-                          <Text className="text-gray-300 text-sm">
+                          <Text className="text-xs" style={{ color: theme.textTertiary }}>Principal</Text>
+                          <Text className="text-sm" style={{ color: theme.textSecondary }}>
                             {formatCurrency(row.principalPayment, asset.currency)}
                           </Text>
                         </View>
                         <View className="flex-1">
-                          <Text className="text-gray-500 text-xs">Interest</Text>
-                          <Text className="text-gray-300 text-sm">
+                          <Text className="text-xs" style={{ color: theme.textTertiary }}>Interest</Text>
+                          <Text className="text-sm" style={{ color: theme.textSecondary }}>
                             {formatCurrency(row.interestPayment, asset.currency)}
                           </Text>
                         </View>
                         <View className="flex-1 items-end">
-                          <Text className="text-gray-500 text-xs">Remaining</Text>
-                          <Text className="text-gray-300 text-sm">
+                          <Text className="text-xs" style={{ color: theme.textTertiary }}>Remaining</Text>
+                          <Text className="text-sm" style={{ color: theme.textSecondary }}>
                             {formatCurrency(row.remainingPrincipal, asset.currency)}
                           </Text>
                         </View>
@@ -921,32 +926,30 @@ export default function AssetDetailScreen() {
           onRequestClose={() => setShowHistoryModal(false)}
         >
           <View className="flex-1 bg-black/80 items-center justify-center px-6">
-            <View className="w-full bg-[#111827] rounded-2xl p-5">
+            <View className="w-full rounded-2xl p-5" style={{ backgroundColor: theme.surface }}>
               <View className="flex-row items-center justify-between">
-                <Text className="text-white text-lg font-bold">Valuation History</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Valuation History</Text>
                 <Pressable
                   onPress={() => setShowHistoryModal(false)}
                   className="w-9 h-9 items-center justify-center"
                 >
-                  <X size={20} color="#9CA3AF" />
+                  <X size={20} color={theme.textSecondary} />
                 </Pressable>
               </View>
 
               {sortedHistory.length === 0 ? (
-                <Text className="text-gray-400 mt-4">No valuations yet.</Text>
+                <Text className="mt-4" style={{ color: theme.textSecondary }}>No valuations yet.</Text>
               ) : (
                 <ScrollView className="mt-4" style={{ maxHeight: 360 }}>
                   {sortedHistory.map((point, idx) => (
                     <View
                       key={`${point.date}-${idx}`}
-                      className={cn(
-                        'flex-row items-center py-3',
-                        idx > 0 && 'border-t border-white/10'
-                      )}
+                      className="flex-row items-center py-3"
+                      style={idx > 0 ? { borderTopWidth: 1, borderTopColor: theme.border } : {}}
                     >
                       <View className="flex-1">
-                        <Text className="text-white font-semibold">{formatCurrency(point.value)}</Text>
-                        <Text className="text-gray-400 text-xs mt-1">{formatDate(point.date)}</Text>
+                        <Text className="font-semibold" style={{ color: theme.text }}>{formatCurrency(point.value)}</Text>
+                        <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>{formatDate(point.date)}</Text>
                       </View>
 
                       <Pressable
@@ -955,9 +958,10 @@ export default function AssetDetailScreen() {
                           setEditingHistoryIndex(idx);
                           setEditingHistoryValue(String(point.value));
                         }}
-                        className="w-10 h-10 bg-white/10 rounded-full items-center justify-center mr-2"
+                        className="w-10 h-10 rounded-full items-center justify-center mr-2"
+                        style={{ backgroundColor: theme.surfaceHover }}
                       >
-                        <Pencil size={16} color="#9CA3AF" />
+                        <Pencil size={16} color={theme.textSecondary} />
                       </Pressable>
 
                       <Pressable
@@ -966,7 +970,8 @@ export default function AssetDetailScreen() {
                           const next = sortedHistory.filter((_, i) => i !== idx);
                           updateAsset(asset.id, { valueHistory: next });
                         }}
-                        className="w-10 h-10 bg-white/10 rounded-full items-center justify-center"
+                        className="w-10 h-10 rounded-full items-center justify-center"
+                        style={{ backgroundColor: theme.surfaceHover }}
                       >
                         <Trash size={16} color="#EF4444" />
                       </Pressable>
@@ -976,14 +981,15 @@ export default function AssetDetailScreen() {
               )}
 
               {editingHistoryIndex !== null && (
-                <View className="mt-5 pt-5 border-t border-white/10">
-                  <Text className="text-gray-400 text-sm mb-2">Edit valuation</Text>
+                <View className="mt-5 pt-5" style={{ borderTopWidth: 1, borderTopColor: theme.border }}>
+                  <Text className="text-sm mb-2" style={{ color: theme.textSecondary }}>Edit valuation</Text>
                   <TextInput
                     value={editingHistoryValue}
                     onChangeText={setEditingHistoryValue}
                     placeholder="0.00"
-                    placeholderTextColor="#6B7280"
-                    className="bg-white/10 rounded-xl p-4 text-white"
+                    placeholderTextColor={theme.textTertiary}
+                    className="rounded-xl p-4"
+                    style={{ backgroundColor: theme.surfaceHover, color: theme.text }}
                     keyboardType="decimal-pad"
                   />
                   <View className="flex-row mt-4 gap-3">
@@ -993,9 +999,10 @@ export default function AssetDetailScreen() {
                         setEditingHistoryIndex(null);
                         setEditingHistoryValue('');
                       }}
-                      className="flex-1 bg-white/10 rounded-xl py-3 items-center"
+                      className="flex-1 rounded-xl py-3 items-center"
+                      style={{ backgroundColor: theme.surfaceHover }}
                     >
-                      <Text className="text-gray-300 font-semibold">Cancel</Text>
+                      <Text className="font-semibold" style={{ color: theme.textSecondary }}>Cancel</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => {
@@ -1025,10 +1032,11 @@ export default function AssetDetailScreen() {
 }
 
 function StatCard({ label, value, delay }: { label: string; value: string; delay: number }) {
+  const { theme } = useTheme();
   return (
-    <Animated.View entering={FadeInRight.delay(delay)} className="flex-1 bg-white/5 rounded-2xl p-4">
-      <Text className="text-gray-400 text-xs">{label}</Text>
-      <Text className="text-white text-lg font-semibold mt-1">{value}</Text>
+    <Animated.View entering={FadeInRight.delay(delay)} className="flex-1 rounded-2xl p-4" style={{ backgroundColor: theme.surfaceHover }}>
+      <Text className="text-xs" style={{ color: theme.textSecondary }}>{label}</Text>
+      <Text className="text-lg font-semibold mt-1" style={{ color: theme.text }}>{value}</Text>
     </Animated.View>
   );
 }
@@ -1044,16 +1052,15 @@ function DetailRow({
   value: string;
   isLast?: boolean;
 }) {
+  const { theme } = useTheme();
   return (
     <View
-      className={cn(
-        'flex-row items-center p-4',
-        !isLast && 'border-b border-white/5'
-      )}
+      className="flex-row items-center p-4"
+      style={!isLast ? { borderBottomWidth: 1, borderBottomColor: theme.border } : {}}
     >
       {icon}
-      <Text className="text-gray-400 ml-3 flex-1">{label}</Text>
-      <Text className="text-white">{value}</Text>
+      <Text className="ml-3 flex-1" style={{ color: theme.textSecondary }}>{label}</Text>
+      <Text style={{ color: theme.text }}>{value}</Text>
     </View>
   );
 }
@@ -1068,6 +1075,7 @@ function SimpleLineChart({
   color: string;
   currency?: string;
 }) {
+  const { theme } = useTheme();
   const chartWidth = SCREEN_WIDTH - 72; // Padding accounted for
   const chartHeight = 120;
 
@@ -1094,13 +1102,13 @@ function SimpleLineChart({
       {/* Chart header */}
       <View className="flex-row justify-between mb-4">
         <View>
-          <Text className="text-gray-400 text-xs">Current</Text>
-          <Text className="text-white text-lg font-semibold">
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>Current</Text>
+          <Text className="text-lg font-semibold" style={{ color: theme.text }}>
             {formatCurrency(lastValue, currency)}
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-gray-400 text-xs">Change</Text>
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>Change</Text>
           <Text
             className="text-lg font-semibold"
             style={{ color: getGainColor(change) }}
@@ -1173,7 +1181,7 @@ function SimpleLineChart({
                 borderRadius: 4,
                 backgroundColor: color,
                 borderWidth: 2,
-                borderColor: '#0A0A0F',
+                borderColor: theme.background,
               }}
             />
           ))}
@@ -1182,10 +1190,10 @@ function SimpleLineChart({
 
       {/* Date labels */}
       <View className="flex-row justify-between mt-2">
-        <Text className="text-gray-500 text-xs">
+        <Text className="text-xs" style={{ color: theme.textTertiary }}>
           {new Date(data[0]?.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
         </Text>
-        <Text className="text-gray-500 text-xs">
+        <Text className="text-xs" style={{ color: theme.textTertiary }}>
           {new Date(data[data.length - 1]?.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
         </Text>
       </View>

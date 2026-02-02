@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Switch } from 'react-native';
+import { View, Text, ScrollView, Pressable, Switch, Modal, Linking, Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Burnt from 'burnt';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import {
   User,
   Bell,
@@ -31,6 +31,11 @@ import {
   ChevronUp,
   Bug,
   AlertTriangle,
+  Star,
+  X,
+  Share2,
+  MessageCircle,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { usePortfolioStore } from '@/lib/store';
 import { usePremiumStore, useEntitlementStatus, syncLegacyStore, type DebugForceMode } from '@/lib/premium-store';
@@ -53,6 +58,7 @@ export default function SettingsScreen() {
   const [notificationsExpanded, setNotificationsExpanded] = React.useState(false);
   const [paywallPreviewOpen, setPaywallPreviewOpen] = React.useState(false);
   const [paywallPreviewFeature, setPaywallPreviewFeature] = React.useState<PaywallFeature>('analysis');
+  const [feedbackModalVisible, setFeedbackModalVisible] = React.useState(false);
 
   // Use unified entitlement status
   const { isPremium, isActuallyPremium, isDebugOverride, debugMode, willRenew, expiresAt } = useEntitlementStatus();
@@ -80,6 +86,33 @@ export default function SettingsScreen() {
     await resetStore();
     // Force refresh by reloading the page
     router.replace('/(tabs)');
+  };
+
+  const handleFeedbackOption = (option: 'great' | 'okay' | 'notgood') => {
+    setFeedbackModalVisible(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    setTimeout(() => {
+      if (option === 'great') {
+        // Open App Store review page
+        const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/your-app-id';
+        Linking.openURL(appStoreUrl).catch(() => {
+          Burnt.toast({
+            title: 'Unable to open App Store',
+            preset: 'error',
+          });
+        });
+      } else {
+        // Open feedback page
+        const feedbackUrl = process.env.EXPO_PUBLIC_FEEDBACK_URL || 'https://forms.gle/your-feedback-form';
+        Linking.openURL(feedbackUrl).catch(() => {
+          Burnt.toast({
+            title: 'Unable to open feedback form',
+            preset: 'error',
+          });
+        });
+      }
+    }, 300);
   };
 
   const handleToggleNotification = (
@@ -213,9 +246,18 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ paddingTop: insets.top }} className="px-5">
-          <Text style={{ color: theme.text }} className="text-2xl font-bold">
-            Settings
-          </Text>
+          <View className="flex-row items-center mb-2">
+            <Pressable
+              onPress={() => router.back()}
+              style={{ backgroundColor: theme.surface }}
+              className="w-10 h-10 rounded-full items-center justify-center mr-3"
+            >
+              <ArrowLeft size={20} color={theme.text} />
+            </Pressable>
+            <Text style={{ color: theme.text }} className="text-2xl font-bold">
+              Settings
+            </Text>
+          </View>
 
           {/* Profile Card */}
           <View className="mt-6 rounded-2xl p-4" style={{ backgroundColor: theme.surface }}>
@@ -868,6 +910,35 @@ export default function SettingsScreen() {
           </Text>
           <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surface }}>
             <SettingsRow
+              icon={<Star size={20} color="#F59E0B" />}
+              label="Rate & Feedback"
+              showArrow
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFeedbackModalVisible(true);
+              }}
+            />
+            <SettingsRow
+              icon={<Share2 size={20} color="#10B981" />}
+              label="Refer a Friend"
+              showArrow
+              onPress={async () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                try {
+                  const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/ledger';
+                  const message = `I've been using Ledger to track my net worth and it's amazing! Private, simple, and powerful. Check it out: ${appStoreUrl}`;
+                  
+                  await Share.share({
+                    message,
+                    url: appStoreUrl, // iOS uses this for rich previews
+                  });
+                } catch (error) {
+                  // User cancelled or error occurred
+                  console.log('Share error:', error);
+                }
+              }}
+            />
+            <SettingsRow
               icon={<HelpCircle size={20} color="#6366F1" />}
               label="Help Center"
               showArrow
@@ -889,21 +960,26 @@ export default function SettingsScreen() {
               icon={<FileText size={20} color="#F59E0B" />}
               label="Investment Disclaimer"
               showArrow
+              isLast={!__DEV__}
               onPress={() => router.push('/disclaimer')}
             />
-            <SettingsRow
-              icon={<RotateCcw size={20} color="#8B5CF6" />}
-              label="Replay Onboarding"
-              showArrow
-              onPress={handleResetOnboarding}
-            />
-            <SettingsRow
-              icon={<AlertTriangle size={20} color="#EF4444" />}
-              label="Clear All Assets (Testing)"
-              showArrow
-              isLast
-              onPress={handleResetPortfolio}
-            />
+            {__DEV__ && (
+              <>
+                <SettingsRow
+                  icon={<RotateCcw size={20} color="#8B5CF6" />}
+                  label="Replay Onboarding"
+                  showArrow
+                  onPress={handleResetOnboarding}
+                />
+                <SettingsRow
+                  icon={<AlertTriangle size={20} color="#EF4444" />}
+                  label="Clear All Assets (Testing)"
+                  showArrow
+                  isLast
+                  onPress={handleResetPortfolio}
+                />
+              </>
+            )}
           </View>
 
           {/* Sign Out */}
@@ -933,6 +1009,173 @@ export default function SettingsScreen() {
           viewOnly
         />
       )}
+
+      {/* Feedback Modal */}
+      <Modal
+        visible={feedbackModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFeedbackModalVisible(false)}
+      >
+        <View 
+          style={{ 
+            flex: 1, 
+            backgroundColor: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.85)',
+            justifyContent: 'center',
+            paddingHorizontal: 20,
+          }}
+        >
+          <Pressable 
+            style={{ 
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            onPress={() => setFeedbackModalVisible(false)}
+          />
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <Animated.View 
+              entering={FadeIn.duration(200)}
+              style={{
+                backgroundColor: theme.background,
+                borderRadius: 24,
+                padding: 24,
+                borderWidth: 1,
+                borderColor: theme.border,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 24,
+                elevation: 8,
+              }}
+            >
+              {/* Header */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ color: theme.text, fontSize: 22, fontWeight: 'bold' }}>
+                  How is your experience?
+                </Text>
+                <Pressable 
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setFeedbackModalVisible(false);
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <X size={24} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+
+              {/* Options */}
+              <View style={{ gap: 12, marginTop: 20 }}>
+                {/* Great */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('great')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#10B98120',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😊</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Great</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Leave a quick rating</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+
+                {/* Okay */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('okay')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#F59E0B20',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😐</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Okay</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Tell us what to improve</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+
+                {/* Not good */}
+                <Pressable
+                  onPress={() => handleFeedbackOption('notgood')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: '#EF444450',
+                  }}
+                >
+                  <View style={{ 
+                    width: 48, 
+                    height: 48, 
+                    borderRadius: 24, 
+                    backgroundColor: '#EF444420',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                  }}>
+                    <Text style={{ fontSize: 28 }}>😔</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Not good</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 2 }}>Get support</Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+
+              {/* Footer */}
+              <Text style={{ 
+                color: theme.textTertiary, 
+                fontSize: 12, 
+                textAlign: 'center',
+                marginTop: 16,
+              }}>
+                We'll never block connectivity for reviews.
+              </Text>
+            </Animated.View>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }

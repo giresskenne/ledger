@@ -18,6 +18,7 @@ import {
   fetchCryptoQuote,
   fetchCryptoHistorical,
   fetchStockQuote as fetchAlphaVantageStockQuote,
+  fetchCompanyOverview,
   isAlphaVantageConfigured,
   getAlphaVantageRemainingCalls,
   SUPPORTED_CRYPTO_SYMBOLS,
@@ -32,8 +33,22 @@ export interface TickerSearchResult {
   ticker: string;
   name: string;
   category: AssetCategory;
+  sector?: string;
   currentPrice?: number;
   currency: Currency;
+}
+
+async function fetchSectorFromAlphaVantage(ticker: string): Promise<string | undefined> {
+  if (!isAlphaVantageConfigured() || getAlphaVantageRemainingCalls() <= 0) {
+    return undefined;
+  }
+
+  const overview = await fetchCompanyOverview(ticker);
+  if (!overview.ok) {
+    return undefined;
+  }
+
+  return overview.data.sector;
 }
 
 /**
@@ -53,12 +68,14 @@ export async function searchTicker(
       if (ticker) {
         const result = await fetchStooqQuote(ticker, country);
         if (result.ok) {
+          const sector = await fetchSectorFromAlphaVantage(ticker);
           return {
             ok: true,
             data: {
               ticker: ticker.toUpperCase(),
               name: ticker.toUpperCase(), // Stooq doesn't provide company names
               category,
+              sector,
               currentPrice: result.data.price,
               currency: (result.data.currency as Currency) || currency,
             },
@@ -69,12 +86,14 @@ export async function searchTicker(
         if (isAlphaVantageConfigured() && getAlphaVantageRemainingCalls() > 0) {
           const avResult = await fetchAlphaVantageStockQuote(ticker);
           if (avResult.ok) {
+            const sector = await fetchSectorFromAlphaVantage(ticker);
             return {
               ok: true,
               data: {
                 ticker: ticker.toUpperCase(),
                 name: ticker.toUpperCase(),
                 category,
+                sector,
                 currentPrice: avResult.data.price,
                 currency: (avResult.data.currency as Currency) || currency,
               },

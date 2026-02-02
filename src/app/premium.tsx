@@ -22,6 +22,7 @@ import { usePremiumStore, useEntitlementStatus, syncLegacyStore, FREE_TIER_LIMIT
 import { cn } from '@/lib/cn';
 import * as Haptics from 'expo-haptics';
 import { getOfferings, purchasePackage, restorePurchases, isRevenueCatEnabled } from '@/lib/revenuecatClient';
+import { useTheme } from '@/lib/theme-store';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -87,6 +88,7 @@ const SOCIAL_PROOF = {
 export default function PremiumScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
   const { previewPaywall } = useLocalSearchParams<{ previewPaywall?: string }>();
   const isPaywallPreview = __DEV__ && (previewPaywall === '1' || previewPaywall === 'true');
   const [selectedPlan, setSelectedPlan] = React.useState<'monthly' | 'yearly'>('yearly');
@@ -344,9 +346,9 @@ export default function PremiumScreen() {
     const statusInfo = getStatusText();
 
     return (
-      <View className="flex-1 bg-[#0A0A0F]">
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0F' : '#1A1A2E' }}>
         <LinearGradient
-          colors={['#F59E0B20', '#0A0A0F']}
+          colors={isDark ? ['#F59E0B20', '#0A0A0F'] : ['#F59E0B30', '#1A1A2E']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 500 }}
         />
 
@@ -355,7 +357,8 @@ export default function PremiumScreen() {
             onPress={() => {
               dismissPaywall();
             }}
-            className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
+            style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}
+            className="w-10 h-10 rounded-full items-center justify-center"
           >
             <X size={20} color="white" />
           </Pressable>
@@ -377,10 +380,10 @@ export default function PremiumScreen() {
             </LinearGradient>
           </View>
 
-          <Text className="text-white text-3xl font-bold text-center">
+          <Text style={{ color: '#FFFFFF' }} className="text-3xl font-bold text-center">
             You're Premium!
           </Text>
-          <Text className="text-gray-400 text-center mt-3 px-4 leading-6">
+          <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-center mt-3 px-4 leading-6">
             You have full access to all premium features including unlimited asset tracking, risk analysis, and more.
           </Text>
 
@@ -395,15 +398,15 @@ export default function PremiumScreen() {
           )}
 
           {/* Subscription details */}
-          <View className="bg-white/10 rounded-2xl p-4 mt-8 w-full">
+          <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.15)' }} className="rounded-2xl p-4 mt-8 w-full">
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-gray-400">Plan</Text>
-              <Text className="text-white font-medium capitalize">
+              <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }}>Plan</Text>
+              <Text style={{ color: '#FFFFFF' }} className="font-medium capitalize">
                 {subscription.plan || 'Premium'}
               </Text>
             </View>
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-gray-400">Status</Text>
+              <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }}>Status</Text>
               <Text className={cn('font-medium', statusInfo.color)}>
                 {statusInfo.text}
               </Text>
@@ -442,9 +445,9 @@ export default function PremiumScreen() {
   const currentTestimonial = TESTIMONIALS[testimonialIndex];
 
   return (
-    <View className="flex-1 bg-[#0A0A0F]">
+    <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0F' : '#1A1A2E' }}>
       <LinearGradient
-        colors={['#F59E0B15', '#0A0A0F']}
+        colors={isDark ? ['#F59E0B15', '#0A0A0F'] : ['#F59E0B20', '#1A1A2E']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.5 }}
       />
 
@@ -454,7 +457,8 @@ export default function PremiumScreen() {
           onPress={() => {
             dismissPaywall();
           }}
-          className="w-10 h-10 bg-black/30 rounded-full items-center justify-center"
+          style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)' }}
+          className="w-10 h-10 rounded-full items-center justify-center"
         >
           <X size={20} color="white" />
         </Pressable>
@@ -468,9 +472,9 @@ export default function PremiumScreen() {
       {/* Content - Fixed layout, no scrolling */}
       <View className="flex-1 px-5 justify-between" style={{ paddingBottom: insets.bottom + 16 }}>
         {isPaywallPreview && (
-          <View className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 mt-2">
-            <Text className="text-gray-300 text-sm font-medium">Paywall preview</Text>
-            <Text className="text-gray-500 text-xs mt-1">
+          <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)' }} className="border rounded-2xl px-4 py-3 mt-2">
+            <Text style={{ color: isDark ? '#D1D5DB' : '#E5E7EB' }} className="text-sm font-medium">Paywall preview</Text>
+            <Text style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} className="text-xs mt-1">
               Purchases and restore are disabled in this preview.
             </Text>
           </View>
@@ -491,10 +495,10 @@ export default function PremiumScreen() {
             </LinearGradient>
           </View>
 
-          <Text className="text-white text-2xl font-bold mt-4 text-center">
+          <Text style={{ color: '#FFFFFF' }} className="text-2xl font-bold mt-4 text-center">
             Ledger Premium
           </Text>
-          <Text className="text-gray-400 text-center mt-1 text-sm">
+          <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-center mt-1 text-sm">
             Unlock powerful analytics for smarter investing
           </Text>
         </Animated.View>
@@ -503,10 +507,10 @@ export default function PremiumScreen() {
         <Animated.View entering={FadeInDown.delay(200)} className="mt-4">
           <View className="flex-row flex-wrap justify-between">
             {FEATURES.map((feature) => (
-              <View key={feature.title} className="w-[48%] bg-white/5 rounded-xl p-3 mb-2">
+              <View key={feature.title} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)' }} className="w-[48%] rounded-xl p-3 mb-2">
                 <View className="flex-row items-center">
                   <feature.icon size={16} color="#F59E0B" />
-                  <Text className="text-white text-xs font-medium ml-2 flex-1">{feature.title}</Text>
+                  <Text style={{ color: '#FFFFFF' }} className="text-xs font-medium ml-2 flex-1">{feature.title}</Text>
                 </View>
               </View>
             ))}
@@ -515,7 +519,7 @@ export default function PremiumScreen() {
 
         {/* Testimonial */}
         <Animated.View entering={FadeInDown.delay(250)} className="mt-3">
-          <View className="bg-white/5 rounded-xl p-4">
+          <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)' }} className="rounded-xl p-4">
             {/* Star Rating */}
             <View className="flex-row items-center justify-between mb-2">
               <View className="flex-row items-center">
@@ -529,14 +533,14 @@ export default function PremiumScreen() {
                   />
                 ))}
               </View>
-              <Text className="text-gray-500 text-xs">
+              <Text style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} className="text-xs">
                 {SOCIAL_PROOF.averageRating} avg • {SOCIAL_PROOF.reviewsCount.toLocaleString()} reviews
               </Text>
             </View>
-            <Text className="text-gray-300 text-sm leading-5" numberOfLines={2}>
+            <Text style={{ color: isDark ? '#D1D5DB' : '#E5E7EB' }} className="text-sm leading-5" numberOfLines={2}>
               "{currentTestimonial.quote}"
             </Text>
-            <Text className="text-gray-500 text-xs mt-2">— {currentTestimonial.author}</Text>
+            <Text style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} className="text-xs mt-2">— {currentTestimonial.author}</Text>
 
             {/* Testimonial indicators */}
             <View className="flex-row justify-center mt-3 gap-1">
@@ -545,7 +549,7 @@ export default function PremiumScreen() {
                   key={index}
                   className={cn(
                     'w-1.5 h-1.5 rounded-full',
-                    index === testimonialIndex ? 'bg-amber-500' : 'bg-white/20'
+                    index === testimonialIndex ? 'bg-amber-500' : isDark ? 'bg-white/20' : 'bg-white/30'
                   )}
                 />
               ))}
@@ -562,17 +566,16 @@ export default function PremiumScreen() {
                 setSelectedPlan('monthly');
                 Haptics.selectionAsync();
               }}
-              className={cn(
-                'flex-1 rounded-xl p-3 border-2',
-                selectedPlan === 'monthly'
-                  ? 'border-amber-500 bg-amber-500/10'
-                  : 'border-white/10 bg-white/5'
-              )}
+              style={{
+                backgroundColor: selectedPlan === 'monthly' ? 'rgba(245, 158, 11, 0.1)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)'),
+                borderColor: selectedPlan === 'monthly' ? '#F59E0B' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)')
+              }}
+              className="flex-1 rounded-xl p-3 border-2"
             >
-              <Text className="text-gray-400 text-xs">Monthly</Text>
+              <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Monthly</Text>
               <View className="flex-row items-baseline mt-1">
-                <Text className="text-white text-2xl font-bold">{PRICING.monthly.price}</Text>
-                <Text className="text-gray-400 text-xs ml-1">{PRICING.monthly.period}</Text>
+                <Text style={{ color: '#FFFFFF' }} className="text-2xl font-bold">{PRICING.monthly.price}</Text>
+                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs ml-1">{PRICING.monthly.period}</Text>
               </View>
               {selectedPlan === 'monthly' && (
                 <View className="absolute top-2 right-2">
@@ -589,12 +592,11 @@ export default function PremiumScreen() {
                 setSelectedPlan('yearly');
                 Haptics.selectionAsync();
               }}
-              className={cn(
-                'flex-1 rounded-xl p-3 border-2 relative',
-                selectedPlan === 'yearly'
-                  ? 'border-amber-500 bg-amber-500/10'
-                  : 'border-white/10 bg-white/5'
-              )}
+              style={{
+                backgroundColor: selectedPlan === 'yearly' ? 'rgba(245, 158, 11, 0.1)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)'),
+                borderColor: selectedPlan === 'yearly' ? '#F59E0B' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)')
+              }}
+              className="flex-1 rounded-xl p-3 border-2 relative"
             >
               {/* Promo Badge */}
               <View className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10">
@@ -608,13 +610,13 @@ export default function PremiumScreen() {
                 </LinearGradient>
               </View>
 
-              <Text className="text-gray-400 text-xs">Yearly</Text>
+              <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Yearly</Text>
               <View className="flex-row items-baseline mt-1">
-                <Text className="text-white text-2xl font-bold">{PRICING.yearly.price}</Text>
-                <Text className="text-gray-400 text-xs ml-1">{PRICING.yearly.period}</Text>
+                <Text style={{ color: '#FFFFFF' }} className="text-2xl font-bold">{PRICING.yearly.price}</Text>
+                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs ml-1">{PRICING.yearly.period}</Text>
               </View>
               <View className="flex-row items-center mt-0.5">
-                <Text className="text-gray-500 text-[10px] line-through mr-1">{PRICING.yearly.fullPrice}</Text>
+                <Text style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} className="text-[10px] line-through mr-1">{PRICING.yearly.fullPrice}</Text>
                 <Text className="text-amber-400 text-[10px] font-medium">{PRICING.yearly.billedAs}</Text>
               </View>
               {selectedPlan === 'yearly' && (

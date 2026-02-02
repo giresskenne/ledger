@@ -1,3 +1,6 @@
+/**
+ * Holdings tab: lists all tracked assets with filters, live price status, and quick metadata like held-in account tags.
+ */
 import React from 'react';
 import { View, Text, ScrollView, Pressable, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,7 +27,7 @@ import * as Haptics from 'expo-haptics';
 import { usePortfolioStore } from '@/lib/store';
 import { FREE_TIER_LIMITS, useEntitlementStatus } from '@/lib/premium-store';
 import { formatCurrency, formatPercent, getGainColor } from '@/lib/formatters';
-import { CATEGORY_INFO, AssetCategory, Asset, CountryCode, Sector } from '@/lib/types';
+import { ACCOUNT_CONFIGS, CATEGORY_INFO, AssetCategory, Asset, CountryCode, Sector } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { AssetLimitBanner, PremiumPaywall } from '@/components/PremiumPaywall';
 import { usePriceDisplay } from '@/lib/market-data/hooks';
@@ -45,6 +48,8 @@ const CATEGORY_ICONS: Record<AssetCategory, React.ReactNode> = {
   physical_metals: <Diamond size={18} color="#A3A3A3" />,
   cash: <Wallet size={18} color="#22C55E" />,
 };
+
+const ACCOUNT_BY_TYPE = new Map(ACCOUNT_CONFIGS.map((c) => [c.type, c]));
 
 type SortOption = 'value' | 'gain' | 'name' | 'category';
 type FilterOption = AssetCategory | 'all';
@@ -410,6 +415,22 @@ function AssetCard({ asset, index }: { asset: Asset; index: number }) {
               <StatusIndicator status={getStatus()} />
             </View>
             <View className="flex-row items-center mt-1">
+              {asset.heldIn ? (
+                <View
+                  className="px-2 py-0.5 rounded-full mr-2 border"
+                  style={{
+                    backgroundColor: `${ACCOUNT_BY_TYPE.get(asset.heldIn)?.color ?? '#6B7280'}22`,
+                    borderColor: 'rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <Text
+                    className="text-[11px] font-semibold"
+                    style={{ color: ACCOUNT_BY_TYPE.get(asset.heldIn)?.color ?? theme.textSecondary }}
+                  >
+                    {asset.heldIn}
+                  </Text>
+                </View>
+              ) : null}
               {asset.ticker && (
                 <Text style={{ color: theme.textSecondary }} className="text-sm mr-2">
                   {asset.ticker}

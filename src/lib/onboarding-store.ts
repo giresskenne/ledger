@@ -46,6 +46,8 @@ export type OnboardingStep =
   | 'first_asset'
   | 'registered_accounts'
   | 'pay_frequency'
+  | 'biometric_permission'
+  | 'calendar_permission'
   | 'notifications'
   | 'room_reveal'
   | 'dashboard_reveal'
