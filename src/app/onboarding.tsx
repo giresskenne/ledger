@@ -78,6 +78,7 @@ import {
   Star,
   ScanFace,
   Clock,
+  Lock,
 } from 'lucide-react-native';
 import {
   useOnboardingStore,
@@ -87,6 +88,8 @@ import {
   OnboardingStep,
 } from '@/lib/onboarding-store';
 import { useRoomStore, getCurrentTaxYearId, countPeriodsUntilEnd, getEffectiveAnnualLimit } from '@/lib/room-store';
+import { useBiometricsStore } from '@/lib/biometrics-store';
+import * as Burnt from 'burnt';
 import { usePortfolioStore } from '@/lib/store';
 import { useNotificationsStore } from '@/lib/notifications-store';
 import { searchTicker as searchTickerAPI } from '@/lib/market-data';
@@ -503,100 +506,102 @@ function CountrySelectionStep({ onNext, onBack }: { onNext: () => void; onBack: 
   );
 
   return (
-    <View style={styles.setupStep}>
-      <LinearGradient colors={['#6366F1', '#4F46E5']} style={StyleSheet.absoluteFill} />
+    <View style={styles.setupDarkStep}>
+      <LinearGradient colors={['#1a1a3a', '#0A0A0F']} style={StyleSheet.absoluteFill} />
 
       {/* Header */}
-      <View style={[styles.setupHeader, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={onBack} style={styles.backButton}>
+      <Animated.View entering={FadeInDown.delay(100)} style={[styles.setupHeader, { paddingTop: insets.top + 12 }]}>
+        <Pressable onPress={onBack} style={styles.darkBackButton}>
           <ChevronLeft size={24} color="white" />
         </Pressable>
         <Text style={styles.setupHeaderTitle}>Select Country</Text>
         <View style={{ width: 36 }} />
-      </View>
+      </Animated.View>
 
       {/* Search */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
-          <Search size={18} color="#999" />
+      <Animated.View entering={FadeInDown.delay(200)} style={styles.searchContainer}>
+        <View style={styles.searchBoxDark}>
+          <Search size={18} color="rgba(255,255,255,0.5)" />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Find your country"
-            placeholderTextColor="#999"
-            style={styles.searchInput}
+            placeholderTextColor="rgba(255,255,255,0.4)"
+            style={styles.searchInputDark}
           />
         </View>
-      </View>
+      </Animated.View>
 
       {/* Country List */}
-      <ScrollView style={styles.countryList} showsVerticalScrollIndicator={false}>
-        {/* Popular */}
-        <View style={styles.countrySection}>
-          <Text style={styles.sectionLabel}>Popular</Text>
-          {countries
-            .filter(([code]) => popular.includes(code))
-            .map(([code, data]) => {
-              const isSelected = selectedCountry === code;
-              return (
-                <Pressable
-                  key={code}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setCountry(code);
-                  }}
-                  style={styles.countryItem}
-                >
-                  <Text style={styles.countryFlag}>{data.flag}</Text>
-                  <Text style={styles.countryLabel}>{data.name}</Text>
-                  {isSelected && (
-                    <View style={styles.radioSelected}>
-                      <View style={styles.radioDot} />
-                    </View>
-                  )}
-                  {!isSelected && <View style={styles.radioUnselected} />}
-                </Pressable>
-              );
-            })}
-        </View>
+      <Animated.View entering={FadeInDown.delay(300)} style={{ flex: 1 }}>
+        <ScrollView style={styles.countryListDark} showsVerticalScrollIndicator={false}>
+          {/* Popular */}
+          <View style={styles.countrySection}>
+            <Text style={styles.sectionLabelDark}>Popular</Text>
+            {countries
+              .filter(([code]) => popular.includes(code))
+              .map(([code, data]) => {
+                const isSelected = selectedCountry === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCountry(code);
+                    }}
+                    style={styles.countryItemDark}
+                  >
+                    <Text style={styles.countryFlag}>{data.flag}</Text>
+                    <Text style={styles.countryLabelDark}>{data.name}</Text>
+                    {isSelected && (
+                      <View style={styles.radioSelected}>
+                        <View style={styles.radioDot} />
+                      </View>
+                    )}
+                    {!isSelected && <View style={styles.radioUnselectedDark} />}
+                  </Pressable>
+                );
+              })}
+          </View>
 
-        {/* All */}
-        <View style={styles.countrySection}>
-          <Text style={styles.sectionLabel}>All Countries</Text>
-          {filteredCountries
-            .filter(([code]) => !popular.includes(code))
-            .map(([code, data]) => {
-              const isSelected = selectedCountry === code;
-              return (
-                <Pressable
-                  key={code}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setCountry(code);
-                  }}
-                  style={styles.countryItem}
-                >
-                  <Text style={styles.countryFlag}>{data.flag}</Text>
-                  <Text style={styles.countryLabel}>{data.name}</Text>
-                  {isSelected && (
-                    <View style={styles.radioSelected}>
-                      <View style={styles.radioDot} />
-                    </View>
-                  )}
-                  {!isSelected && <View style={styles.radioUnselected} />}
-                </Pressable>
-              );
-            })}
-        </View>
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          {/* All */}
+          <View style={styles.countrySection}>
+            <Text style={styles.sectionLabelDark}>All Countries</Text>
+            {filteredCountries
+              .filter(([code]) => !popular.includes(code))
+              .map(([code, data]) => {
+                const isSelected = selectedCountry === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setCountry(code);
+                    }}
+                    style={styles.countryItemDark}
+                  >
+                    <Text style={styles.countryFlag}>{data.flag}</Text>
+                    <Text style={styles.countryLabelDark}>{data.name}</Text>
+                    {isSelected && (
+                      <View style={styles.radioSelected}>
+                        <View style={styles.radioDot} />
+                      </View>
+                    )}
+                    {!isSelected && <View style={styles.radioUnselectedDark} />}
+                  </Pressable>
+                );
+              })}
+          </View>
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      </Animated.View>
 
       {/* Next Button with currency notice */}
-      <View style={[styles.setupFooter, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.setupDarkFooter, { paddingBottom: insets.bottom + 16 }]}>
         {selectedCountry && (
-          <Animated.View entering={FadeInUp.duration(200)} style={styles.currencyNotice}>
+          <Animated.View entering={FadeInUp.duration(200)} style={styles.currencyNoticeDark}>
             <Info size={14} color="#6366F1" />
-            <Text style={styles.currencyNoticeText}>
+            <Text style={styles.currencyNoticeTextDark}>
               Currency set to {selectedCurrency}. You can change this in Settings.
             </Text>
           </Animated.View>
@@ -1695,19 +1700,26 @@ function PayFrequencyStep({ onNext, onBack }: { onNext: () => void; onBack: () =
           {/* Privacy notice */}
           <View style={{ 
             marginTop: 16, 
-            backgroundColor: 'rgba(99, 102, 241, 0.1)', 
+            marginBottom: 16,
+            backgroundColor: 'rgba(245, 158, 11, 0.1)', 
             borderRadius: 12, 
             padding: 12,
             borderWidth: 1,
-            borderColor: 'rgba(99, 102, 241, 0.2)',
+            borderColor: 'rgba(245, 158, 11, 0.4)',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
           }}>
+            <Lock size={14} color="#F59E0B" />
             <Text style={{ 
               color: 'rgba(255, 255, 255, 0.7)', 
               fontSize: 12, 
               textAlign: 'center',
               lineHeight: 18,
+              flex: 1,
             }}>
-              🔒 Your data is encrypted and secured. We never share your financial information.
+              Your data is encrypted and secured. We never share your financial information.
             </Text>
           </View>
         </Animated.View>
@@ -1816,6 +1828,7 @@ function BiometricPermissionStep({ onNext, onBack }: { onNext: () => void; onBac
   const insets = useSafeAreaInsets();
   const [isChecking, setIsChecking] = useState(false);
   const [hasHardware, setHasHardware] = useState(true);
+  const setBiometricsEnabled = useBiometricsStore((s) => s.setEnabled);
   
   // Animated values for the pulsing icon
   const pulseScale = useSharedValue(1);
@@ -1882,29 +1895,62 @@ function BiometricPermissionStep({ onNext, onBack }: { onNext: () => void; onBac
     setIsChecking(true);
 
     try {
+      // Check if biometrics are enrolled
+      const hasHw = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      
+      if (!hasHw || !isEnrolled) {
+        Burnt.toast({
+          title: 'Face ID / Touch ID not set up',
+          message: 'You can enable this later in Settings once configured.',
+          preset: 'none',
+          haptic: 'warning',
+          from: 'top',
+        });
+        // Automatically proceed to next step after a short delay
+        setTimeout(() => {
+          setIsChecking(false);
+          onNext();
+        }, 1500);
+        return;
+      }
+
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Enable biometric protection',
-        cancelLabel: 'Skip',
-        fallbackLabel: 'Use Passcode',
+        promptMessage: 'Enable biometric login for Ledger',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
       });
 
       if (result.success) {
+        // Actually enable biometrics in the store
+        console.log('[Onboarding] Biometrics authentication successful, enabling biometrics...');
+        setBiometricsEnabled(true);
+        console.log('[Onboarding] Biometrics enabled in store');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // User can now use biometrics - proceed to next step
+        Burnt.toast({
+          title: 'Biometric login enabled',
+          message: 'Ledger will lock after 30 seconds in the background.',
+          preset: 'done',
+          haptic: 'success',
+          from: 'top',
+        });
         onNext();
       } else {
-        // User cancelled or failed - still proceed
+        // User cancelled - don't enable, but proceed
+        console.log('[Onboarding] Biometrics authentication cancelled or failed');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        onNext();
+        setIsChecking(false);
       }
     } catch (error) {
       console.log('Biometric error:', error);
-      onNext();
+      setIsChecking(false);
     }
   };
 
   const handleSkip = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Don't enable biometrics
+    setBiometricsEnabled(false);
     onNext();
   };
 
@@ -2036,18 +2082,34 @@ function BiometricPermissionStep({ onNext, onBack }: { onNext: () => void; onBac
         </Animated.View>
 
         <View style={[styles.setupDarkFooter, { paddingBottom: insets.bottom + 16 }]}>
-          <Pressable onPress={handleEnable} disabled={isChecking}>
-            <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.setupButton}>
-              {isChecking ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Text style={styles.setupButtonText}>Enable Face ID</Text>
-                  <ScanFace size={20} color="white" />
-                </>
-              )}
-            </LinearGradient>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Pressable onPress={handleEnable} disabled={isChecking} style={{ flex: 1 }}>
+              <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.setupButton}>
+                {isChecking ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Text style={styles.setupButtonText}>Enable Face ID</Text>
+                    <ScanFace size={20} color="white" />
+                  </>
+                )}
+              </LinearGradient>
+            </Pressable>
+            <Pressable 
+              onPress={handleSkip} 
+              style={{
+                paddingHorizontal: 20,
+                paddingVertical: 16,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: 'rgba(99, 102, 241, 0.5)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>skip</Text>
+            </Pressable>
+          </View>
           <Text style={styles.notificationDisclaimer}>
             You can change this in Settings anytime.
           </Text>
@@ -3283,14 +3345,37 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 10,
   },
+  searchBoxDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
   searchInput: {
     flex: 1,
     fontSize: 16,
     color: '#000',
   },
+  searchInputDark: {
+    flex: 1,
+    fontSize: 16,
+    color: 'white',
+  },
   countryList: {
     flex: 1,
     backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+  },
+  countryListDark: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 20,
@@ -3305,7 +3390,21 @@ const styles = StyleSheet.create({
     marginLeft: 24,
     marginBottom: 8,
   },
+  sectionLabelDark: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    marginLeft: 24,
+    marginBottom: 8,
+  },
   countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  countryItemDark: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -3320,12 +3419,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
   },
+  countryLabelDark: {
+    flex: 1,
+    fontSize: 16,
+    color: 'white',
+  },
   radioUnselected: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#CCC',
+  },
+  radioUnselectedDark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   radioSelected: {
     width: 24,
@@ -3357,10 +3468,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 8,
   },
+  currencyNoticeDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
   currencyNoticeText: {
     flex: 1,
     fontSize: 13,
     color: '#6366F1',
+  },
+  currencyNoticeTextDark: {
+    flex: 1,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
   },
   setupButton: {
     flexDirection: 'row',
