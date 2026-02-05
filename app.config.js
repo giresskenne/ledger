@@ -23,8 +23,10 @@ module.exports = () => {
     ios: {
       ...(base.ios ?? {}),
       bundleIdentifier: 'com.masterpiece-ledger.app',
+      buildNumber: '7',
       infoPlist: {
         ...(base.ios?.infoPlist ?? {}),
+        ITSAppUsesNonExemptEncryption: false,
         NSFaceIDUsageDescription:
           'Ledger uses Face ID to protect your financial data when you leave the app.',
         NSCalendarsUsageDescription:

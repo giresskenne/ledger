@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, AlertTriangle, Info, TrendingUp, DollarSign, ChevronDown } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useLegalStore } from '@/lib/legal-store';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, FadeOut, useSharedValue, useAnimatedStyle, withTiming, runOnJS, Easing } from 'react-native-reanimated';
 import { useTheme } from '@/lib/theme-store';
 
 export default function DisclaimerScreen() {
@@ -14,27 +14,53 @@ export default function DisclaimerScreen() {
   const { theme, isDark } = useTheme();
   const acceptDisclaimer = useLegalStore((s) => s.acceptDisclaimer);
   const [showFullDisclaimer, setShowFullDisclaimer] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  
+  // Animation values for transition
+  const overlayOpacity = useSharedValue(1);
+  const cardScale = useSharedValue(1);
+  const cardOpacity = useSharedValue(1);
+
+  const navigateToDashboard = () => {
+    router.replace('/(tabs)');
+  };
 
   const handleAcknowledge = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     acceptDisclaimer();
-    router.replace('/(tabs)');
+    setIsTransitioning(true);
+    
+    // Animate out with scale and fade
+    cardScale.value = withTiming(0.9, { duration: 250, easing: Easing.out(Easing.cubic) });
+    cardOpacity.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.cubic) });
+    overlayOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }, () => {
+      runOnJS(navigateToDashboard)();
+    });
   };
+  
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+  
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+    opacity: cardOpacity.value,
+  }));
 
   // Compact notice modal
   if (!showFullDisclaimer) {
     return (
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)' }}>
+      <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)' }, overlayStyle]}>
         <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20 }}>
           <Animated.View 
             entering={FadeIn.duration(300)}
-            style={{ 
+            style={[{ 
               backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
               borderRadius: 24,
               padding: 24,
               borderWidth: 2,
               borderColor: '#F59E0B',
-            }}
+            }, cardAnimatedStyle]}
           >
             {/* Warning Icon */}
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
@@ -82,11 +108,13 @@ export default function DisclaimerScreen() {
             <View style={{ gap: 12 }}>
               <Pressable
                 onPress={handleAcknowledge}
+                disabled={isTransitioning}
                 style={{
                   backgroundColor: '#6366F1',
                   borderRadius: 16,
                   paddingVertical: 16,
                   alignItems: 'center',
+                  opacity: isTransitioning ? 0.7 : 1,
                 }}
               >
                 <Text style={{ color: 'white', fontSize: 16, fontWeight: '600' }}>
@@ -99,6 +127,7 @@ export default function DisclaimerScreen() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setShowFullDisclaimer(true);
                 }}
+                disabled={isTransitioning}
                 style={{
                   backgroundColor: theme.surfaceHover,
                   borderRadius: 16,
@@ -115,7 +144,7 @@ export default function DisclaimerScreen() {
             </View>
           </Animated.View>
         </View>
-      </View>
+      </Animated.View>
     );
   }
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Alert, Dimensions } from 'react-native';
+import { View, Text, Pressable, Alert, Dimensions, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -437,6 +437,31 @@ export default function PremiumScreen() {
               {isLoading ? 'Restoring...' : 'Restore Purchases'}
             </Text>
           </Pressable>
+
+          {/* Legal links (App Store requirement) */}
+          <View className="flex-row justify-center items-center mt-4">
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => {
+                const url = 'https://giresskenne.github.io/ledger/privacy.html';
+                router.push('/privacy');
+              }}
+              hitSlop={8}
+            >
+              <Text className="text-indigo-400 text-xs underline">Privacy Policy</Text>
+            </Pressable>
+            <Text className="text-gray-600 text-xs mx-2">•</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => {
+                const url = 'https://giresskenne.github.io/ledger/terms.html';
+                router.push('/terms');
+              }}
+              hitSlop={8}
+            >
+              <Text className="text-indigo-400 text-xs underline">Terms of Use</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -662,26 +687,53 @@ export default function PremiumScreen() {
             <Text className="text-gray-700">•</Text>
             <Text className="text-gray-600 text-[10px]">Cancel anytime</Text>
           </View>
+
+          {/* Legal links (App Store subscription requirement) */}
+          <View className="flex-row justify-center items-center mt-3">
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => {
+                const url = 'https://giresskenne.github.io/ledger/privacy.html';
+                router.push('/privacy');
+              }}
+              hitSlop={8}
+            >
+              <Text className="text-indigo-400 text-[11px] underline">Privacy Policy</Text>
+            </Pressable>
+            <Text className="text-gray-700 text-[11px] mx-2">•</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => {
+                const url = 'https://giresskenne.github.io/ledger/terms.html';
+                router.push('/terms');
+              }}
+              hitSlop={8}
+            >
+              <Text className="text-indigo-400 text-[11px] underline">Terms of Use</Text>
+            </Pressable>
+          </View>
         </Animated.View>
 
-        {/* RevenueCat Notice - Compact */}
-        <Animated.View entering={FadeInDown.delay(500)} className="mt-3">
-          {isRevenueCatEnabled() ? (
-            <View className="bg-green-500/10 rounded-lg p-2 flex-row items-center">
-              <Check size={12} color="#10B981" />
-              <Text className="text-green-400 text-[10px] ml-2 flex-1">
-                RevenueCat connected. Real purchases enabled.
-              </Text>
-            </View>
-          ) : (
-            <View className="bg-indigo-500/10 rounded-lg p-2 flex-row items-center">
-              <Lock size={12} color="#6366F1" />
-              <Text className="text-indigo-400 text-[10px] ml-2 flex-1">
-                Set up RevenueCat in Payments tab for real payments.
-              </Text>
-            </View>
-          )}
-        </Animated.View>
+        {/* RevenueCat Notice - Only show in development builds */}
+        {__DEV__ && (
+          <Animated.View entering={FadeInDown.delay(500)} className="mt-3">
+            {isRevenueCatEnabled() ? (
+              <View className="bg-green-500/10 rounded-lg p-2 flex-row items-center">
+                <Check size={12} color="#10B981" />
+                <Text className="text-green-400 text-[10px] ml-2 flex-1">
+                  RevenueCat connected. Real purchases enabled.
+                </Text>
+              </View>
+            ) : (
+              <View className="bg-indigo-500/10 rounded-lg p-2 flex-row items-center">
+                <Lock size={12} color="#6366F1" />
+                <Text className="text-indigo-400 text-[10px] ml-2 flex-1">
+                  Set up RevenueCat in Payments tab for real payments.
+                </Text>
+              </View>
+            )}
+          </Animated.View>
+        )}
       </View>
     </View>
   );
