@@ -20,9 +20,10 @@ import {
   JurisdictionCode,
   RegisteredAccountType,
 } from '@/lib/types';
-import { searchTicker } from '@/lib/market-data';
+import { searchTicker, getPriceOnDate } from '@/lib/market-data';
 import { cn } from '@/lib/cn';
 import * as Haptics from 'expo-haptics';
+import * as Burnt from 'burnt';
 import { PlatformPicker } from '@/components/PlatformPicker';
 import { useOnboardingStore } from '@/lib/onboarding-store';
 import { useRoomStore } from '@/lib/room-store';
@@ -211,6 +212,15 @@ export default function AddAssetScreen() {
   const [showCountryPicker, setShowCountryPicker] = React.useState(false);
   const [showPurchaseDatePicker, setShowPurchaseDatePicker] = React.useState(false);
   const [showMaturityDatePicker, setShowMaturityDatePicker] = React.useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = React.useState(false);
+  const [isFetchingHistoricalPrice, setIsFetchingHistoricalPrice] = React.useState(false);
+
+  // Refs for scrolling to invalid fields
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const nameRef = React.useRef<View>(null);
+  const quantityRef = React.useRef<View>(null);
+  const currentPriceRef = React.useRef<View>(null);
+  const purchasePriceRef = React.useRef<View>(null);
 
   // Ticker search state
   const [isSearchingTicker, setIsSearchingTicker] = React.useState(false);
@@ -326,8 +336,90 @@ export default function AddAssetScreen() {
     }
   };
 
+  // Fetch historical purchase price for the selected date
+  const fetchHistoricalPurchasePrice = React.useCallback(async (date: Date) => {
+    console.log('[AddAsset] fetchHistoricalPurchasePrice called:', {
+      date: date.toISOString().slice(0, 10),
+      ticker: ticker.trim(),
+      canSearchTicker,
+      startTrackingToday,
+      category,
+      country,
+    });
+
+    // Only auto-fill if user has a ticker set and category supports live data
+    if (!ticker.trim()) {
+      console.log('[AddAsset] Skipped: no ticker set');
+      return;
+    }
+    if (!canSearchTicker) {
+      console.log('[AddAsset] Skipped: category does not support ticker search');
+      return;
+    }
+    if (startTrackingToday) {
+      console.log('[AddAsset] Skipped: startTrackingToday is enabled');
+      return;
+    }
+
+    // Don't overwrite if price is today (current price already fetched)
+    const today = new Date();
+    const isToday = date.toISOString().slice(0, 10) === today.toISOString().slice(0, 10);
+    if (isToday) {
+      console.log('[AddAsset] Skipped: date is today');
+      return;
+    }
+
+    console.log('[AddAsset] Fetching historical price...');
+    setIsFetchingHistoricalPrice(true);
+    try {
+      // For searchable tickers (stocks/funds/crypto), don't pass the user's country —
+      // it would resolve to e.g. AAPL.CA instead of AAPL.US. Let the provider use its default (US).
+      const tickerCountry = shouldShowCountryField ? country : undefined;
+      const result = await getPriceOnDate(ticker.trim(), date, category, tickerCountry);
+      console.log('[AddAsset] getPriceOnDate result:', JSON.stringify(result));
+      if (result.ok) {
+        setPurchasePrice(result.data.price.toFixed(2));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Burnt.toast({
+          title: 'Purchase price updated',
+          message: `Set to $${result.data.price.toFixed(2)} (closing price on ${new Date(result.data.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
+          preset: 'done',
+          haptic: 'success',
+          from: 'top',
+        });
+      } else {
+        console.log('[AddAsset] Historical price not found:', result.reason);
+      }
+    } catch (e) {
+      console.log('[AddAsset] Historical price fetch failed:', e);
+    } finally {
+      setIsFetchingHistoricalPrice(false);
+    }
+  }, [ticker, canSearchTicker, startTrackingToday, category, country, shouldShowCountryField]);
+
+  // Field-level validation for highlighting
+  const isNameValid = name.trim().length > 0;
+  const isQuantityValid = formCopy.hideQuantity || (Number.isFinite(parseFloat(quantity)) && parseFloat(quantity) > 0);
+  const isCurrentPriceValid = Number.isFinite(resolvedCurrentPrice) && resolvedCurrentPrice > 0;
+  const isPurchasePriceValid = Number.isFinite(resolvedPurchasePrice) && resolvedPurchasePrice > 0;
+
+  // Build a hint for the submit button showing what's still needed
+  const missingFields = React.useMemo(() => {
+    const missing: string[] = [];
+    if (!isNameValid) missing.push('name');
+    if (!isQuantityValid) missing.push('quantity');
+    if (!isPurchasePriceValid && !startTrackingToday) missing.push('purchase price');
+    if (!isCurrentPriceValid) missing.push('current price');
+    return missing;
+  }, [isNameValid, isQuantityValid, isPurchasePriceValid, isCurrentPriceValid, startTrackingToday]);
+
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // Show validation highlights
+      setAttemptedSubmit(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -422,6 +514,7 @@ export default function AddAssetScreen() {
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           className="flex-1"
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
           keyboardShouldPersistTaps="handled"
@@ -478,16 +571,19 @@ export default function AddAssetScreen() {
           </Animated.View>
 
           {/* Name */}
-          <Animated.View entering={FadeInDown.delay(150)} className="mt-6">
+          <Animated.View entering={FadeInDown.delay(150)} className="mt-6" ref={nameRef}>
             <Text style={{ color: theme.textSecondary }} className="text-sm mb-2">Asset Name *</Text>
             <TextInput
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => { setName(text); if (attemptedSubmit && text.trim()) setAttemptedSubmit(false); }}
               placeholder={formCopy.namePlaceholder}
               placeholderTextColor="#6B7280"
-              style={{ backgroundColor: theme.surface, color: theme.text }}
+              style={{ backgroundColor: theme.surface, color: theme.text, borderColor: attemptedSubmit && !isNameValid ? '#EF4444' : 'transparent', borderWidth: attemptedSubmit && !isNameValid ? 1.5 : 0 }}
               className="rounded-xl p-4"
             />
+            {attemptedSubmit && !isNameValid && (
+              <Text className="text-red-400 text-xs mt-1">Required</Text>
+            )}
           </Animated.View>
 
           {/* Ticker (optional) - with live data search */}
@@ -543,46 +639,62 @@ export default function AddAssetScreen() {
           {/* Quantity & Price Row */}
           <Animated.View entering={FadeInDown.delay(250)} className="mt-6 flex-row gap-4">
             {!formCopy.hideQuantity && (
-              <View className="flex-1">
+              <View className="flex-1" ref={quantityRef}>
                 <Text style={{ color: theme.textSecondary }} className="text-sm mb-2">{formCopy.quantityLabel}</Text>
                 <TextInput
                   value={quantity}
                   onChangeText={setQuantity}
                   placeholder={formCopy.quantityPlaceholder}
                   placeholderTextColor="#6B7280"
-                  style={{ backgroundColor: theme.surface, color: theme.text }}
+                  style={{ backgroundColor: theme.surface, color: theme.text, borderColor: attemptedSubmit && !isQuantityValid ? '#EF4444' : 'transparent', borderWidth: attemptedSubmit && !isQuantityValid ? 1.5 : 0 }}
                   className="rounded-xl p-4"
                   keyboardType="decimal-pad"
                 />
+                {attemptedSubmit && !isQuantityValid && (
+                  <Text className="text-red-400 text-xs mt-1">Required</Text>
+                )}
               </View>
             )}
-            <View className={cn('flex-1', formCopy.hideQuantity && 'w-full')}>
+            <View className={cn('flex-1', formCopy.hideQuantity && 'w-full')} ref={purchasePriceRef}>
               <Text style={{ color: theme.textSecondary }} className="text-sm mb-2">{formCopy.purchasePriceLabel}</Text>
-              <TextInput
-                value={purchasePrice}
-                onChangeText={setPurchasePrice}
-                placeholder="0.00"
-                placeholderTextColor="#6B7280"
-                style={{ backgroundColor: theme.surface, color: theme.text }}
-                className={cn('rounded-xl p-4', startTrackingToday && 'opacity-50')}
-                keyboardType="decimal-pad"
-                editable={!startTrackingToday}
-              />
+              <View>
+                <TextInput
+                  value={purchasePrice}
+                  onChangeText={setPurchasePrice}
+                  placeholder="0.00"
+                  placeholderTextColor="#6B7280"
+                  style={{ backgroundColor: theme.surface, color: theme.text, borderColor: attemptedSubmit && !isPurchasePriceValid && !startTrackingToday ? '#EF4444' : 'transparent', borderWidth: attemptedSubmit && !isPurchasePriceValid && !startTrackingToday ? 1.5 : 0 }}
+                  className={cn('rounded-xl p-4', startTrackingToday && 'opacity-50')}
+                  keyboardType="decimal-pad"
+                  editable={!startTrackingToday}
+                />
+                {isFetchingHistoricalPrice && (
+                  <View className="absolute right-3 top-0 bottom-0 justify-center">
+                    <ActivityIndicator size="small" color="#6366F1" />
+                  </View>
+                )}
+              </View>
+              {attemptedSubmit && !isPurchasePriceValid && !startTrackingToday && (
+                <Text className="text-red-400 text-xs mt-1">Required</Text>
+              )}
             </View>
           </Animated.View>
 
           {/* Current Price */}
-          <Animated.View entering={FadeInDown.delay(300)} className="mt-6">
+          <Animated.View entering={FadeInDown.delay(300)} className="mt-6" ref={currentPriceRef}>
             <Text style={{ color: theme.textSecondary }} className="text-sm mb-2">{formCopy.currentPriceLabel}</Text>
             <TextInput
               value={currentPrice}
               onChangeText={setCurrentPrice}
               placeholder="0.00"
               placeholderTextColor="#6B7280"
-              style={{ backgroundColor: theme.surface, color: theme.text }}
+              style={{ backgroundColor: theme.surface, color: theme.text, borderColor: attemptedSubmit && !isCurrentPriceValid ? '#EF4444' : 'transparent', borderWidth: attemptedSubmit && !isCurrentPriceValid ? 1.5 : 0 }}
               className="rounded-xl p-4"
               keyboardType="decimal-pad"
             />
+            {attemptedSubmit && !isCurrentPriceValid && (
+              <Text className="text-red-400 text-xs mt-1">Required</Text>
+            )}
             <Text style={{ color: theme.textSecondary }} className="text-xs mt-2">
               {formCopy.currentPriceHint}
             </Text>
@@ -704,18 +816,37 @@ export default function AddAssetScreen() {
               <Calendar size={20} color={startTrackingToday ? theme.textSecondary : theme.textSecondary} />
             </Pressable>
             {showPurchaseDatePicker && (
-              <DateTimePicker
-                value={purchaseDate}
-                mode="date"
-                display="spinner"
-                onChange={(event, date) => {
-                  if (Platform.OS === 'android') {
-                    setShowPurchaseDatePicker(false);
-                  }
-                  if (date) setPurchaseDate(date);
-                }}
-                themeVariant="dark"
-              />
+              <View>
+                <View className="flex-row justify-end pt-2 pr-2">
+                  <Pressable
+                    onPress={() => {
+                      setShowPurchaseDatePicker(false);
+                      Haptics.selectionAsync();
+                      // Fetch historical price for the selected date
+                      fetchHistoricalPurchasePrice(purchaseDate);
+                    }}
+                    className="px-4 py-1.5 rounded-lg bg-indigo-600"
+                  >
+                    <Text className="text-white text-sm font-semibold">Done</Text>
+                  </Pressable>
+                </View>
+                <DateTimePicker
+                  value={purchaseDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={(event, date) => {
+                    if (Platform.OS === 'android') {
+                      setShowPurchaseDatePicker(false);
+                      if (date) {
+                        setPurchaseDate(date);
+                        fetchHistoricalPurchasePrice(date);
+                      }
+                    }
+                    if (date) setPurchaseDate(date);
+                  }}
+                  themeVariant="dark"
+                />
+              </View>
             )}
           </Animated.View>
 
@@ -770,18 +901,31 @@ export default function AddAssetScreen() {
                   <Calendar size={20} color={theme.textSecondary} />
                 </Pressable>
                 {showMaturityDatePicker && (
-                  <DateTimePicker
-                    value={maturityDate || new Date()}
-                    mode="date"
-                    display="spinner"
-                    onChange={(event, date) => {
-                      if (Platform.OS === 'android') {
-                        setShowMaturityDatePicker(false);
-                      }
-                      if (date) setMaturityDate(date);
-                    }}
-                    themeVariant="dark"
-                  />
+                  <View>
+                    <View className="flex-row justify-end pt-2 pr-2">
+                      <Pressable
+                        onPress={() => {
+                          setShowMaturityDatePicker(false);
+                          Haptics.selectionAsync();
+                        }}
+                        className="px-4 py-1.5 rounded-lg bg-indigo-600"
+                      >
+                        <Text className="text-white text-sm font-semibold">Done</Text>
+                      </Pressable>
+                    </View>
+                    <DateTimePicker
+                      value={maturityDate || new Date()}
+                      mode="date"
+                      display="spinner"
+                      onChange={(event, date) => {
+                        if (Platform.OS === 'android') {
+                          setShowMaturityDatePicker(false);
+                        }
+                        if (date) setMaturityDate(date);
+                      }}
+                      themeVariant="dark"
+                    />
+                  </View>
                 )}
               </Animated.View>
 
@@ -1051,17 +1195,18 @@ export default function AddAssetScreen() {
           <Animated.View entering={FadeInDown.delay(700)} className="mt-8">
             <Pressable
               onPress={handleSubmit}
-              disabled={!canSubmit}
-              style={{ backgroundColor: canSubmit ? undefined : theme.surface }}
-              className={cn(
-                'rounded-2xl p-4 items-center',
-                canSubmit && 'bg-indigo-600'
-              )}
+              style={{ backgroundColor: canSubmit ? '#4F46E5' : theme.surface, borderWidth: canSubmit ? 0 : 1.5, borderColor: canSubmit ? undefined : theme.border }}
+              className="rounded-2xl p-4 items-center"
             >
               <Text style={{ color: canSubmit ? 'white' : theme.textSecondary }} className="font-semibold text-lg">
                 Add to Portfolio
               </Text>
             </Pressable>
+            {!canSubmit && missingFields.length > 0 && (
+              <Text className="text-red-400 text-xs text-center mt-2">
+                Still needed: {missingFields.join(', ')}
+              </Text>
+            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

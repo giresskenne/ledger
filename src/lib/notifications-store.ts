@@ -131,6 +131,7 @@ export const useNotificationsStore = create<NotificationsState>()(
           'rebalance_',
           'stalevaluation_',
           'amortization_',
+          'rateus_',
         ];
         const isGenerated = (id: string) => generatedPrefixes.some((p) => id.startsWith(p));
 

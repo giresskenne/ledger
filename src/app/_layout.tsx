@@ -20,7 +20,6 @@ import { useAppRatingStore } from '@/lib/app-rating-store';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: false,

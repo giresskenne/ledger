@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Alert, Dimensions, Linking } from 'react-native';
+import { View, Text, Pressable, Alert, Dimensions, Linking, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -166,16 +166,42 @@ export default function PremiumScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+      // If offerings haven't loaded yet, try fetching them
+      let offerings = rcOfferings;
+      if (!offerings) {
+        const result = await getOfferings();
+        if (result.ok && result.data.current) {
+          offerings = result.data.current;
+          setRcOfferings(offerings);
+        }
+      }
+
+      if (!offerings) {
+        Alert.alert(
+          'Connection Error',
+          'Unable to load subscription options. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
+        setIsLoading(false);
+        return;
+      }
+
       // Get the package to purchase
       const packageId = PRICING[selectedPlan].packageId;
-      const pkg = rcOfferings?.availablePackages.find(
+      const pkg = offerings?.availablePackages.find(
         (p: any) => p.identifier === packageId
       );
 
       if (!pkg) {
+        console.log('[Premium Debug] Package not found:', {
+          packageId,
+          availablePackages: rcOfferings?.availablePackages?.map((p: any) => p.identifier) || [],
+          selectedPlan,
+        });
         Alert.alert(
-          'Package Not Found',
-          'The selected package is not available. Please try again.'
+          'Subscription Unavailable',
+          'This subscription plan is currently unavailable. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
         );
         setIsLoading(false);
         return;
@@ -215,12 +241,18 @@ export default function PremiumScreen() {
             : 'There was an error processing your purchase. Please try again.'
         );
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.log('[Premium Debug] Purchase exception:', error?.message || error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        'Purchase Failed',
-        'There was an error processing your purchase. Please try again.'
-      );
+      
+      // Don't show error for user cancellation
+      const isCancelled = error?.userCancelled || error?.code === '1' || error?.message?.includes('cancel');
+      if (!isCancelled) {
+        Alert.alert(
+          'Purchase Failed',
+          'There was an error processing your purchase. Please try again.'
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -494,8 +526,12 @@ export default function PremiumScreen() {
         </Pressable>
       </View>
 
-      {/* Content - Fixed layout, no scrolling */}
-      <View className="flex-1 px-5 justify-between" style={{ paddingBottom: insets.bottom + 16 }}>
+      {/* Content - Scrollable for iPad compatibility */}
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }}
+        showsVerticalScrollIndicator={false}
+      >
         {isPaywallPreview && (
           <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)' }} className="border rounded-2xl px-4 py-3 mt-2">
             <Text style={{ color: isDark ? '#D1D5DB' : '#E5E7EB' }} className="text-sm font-medium">Paywall preview</Text>
@@ -505,7 +541,7 @@ export default function PremiumScreen() {
           </View>
         )}
         {/* Hero */}
-        <Animated.View entering={FadeInDown.delay(100)} className="items-center pt-2">
+        <Animated.View entering={FadeInDown.delay(100)} className="items-center pt-4">
           <View className="w-16 h-16 rounded-full overflow-hidden">
             <LinearGradient
               colors={['#F59E0B', '#D97706']}
@@ -637,12 +673,12 @@ export default function PremiumScreen() {
 
               <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs">Yearly</Text>
               <View className="flex-row items-baseline mt-1">
-                <Text style={{ color: '#FFFFFF' }} className="text-2xl font-bold">{PRICING.yearly.price}</Text>
-                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs ml-1">{PRICING.yearly.period}</Text>
+                <Text style={{ color: '#FFFFFF' }} className="text-2xl font-bold">$49.99</Text>
+                <Text style={{ color: isDark ? '#9CA3AF' : '#D1D5DB' }} className="text-xs ml-1">/year</Text>
               </View>
               <View className="flex-row items-center mt-0.5">
                 <Text style={{ color: isDark ? '#6B7280' : '#9CA3AF' }} className="text-[10px] line-through mr-1">{PRICING.yearly.fullPrice}</Text>
-                <Text className="text-amber-400 text-[10px] font-medium">{PRICING.yearly.billedAs}</Text>
+                <Text className="text-amber-400 text-xs font-medium">{PRICING.yearly.price}{PRICING.yearly.period}</Text>
               </View>
               {selectedPlan === 'yearly' && (
                 <View className="absolute top-2 right-2">
@@ -675,8 +711,11 @@ export default function PremiumScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Text className="text-gray-500 text-center text-[10px] mt-2 px-4">
-            Cancel anytime. No charge until trial ends.
+          <Text className="text-gray-500 text-center text-[11px] mt-2 px-4">
+            {selectedPlan === 'yearly'
+              ? 'After your 7-day free trial, you will be charged $49.99/year. Cancel anytime. No charge until trial ends.'
+              : 'After your 7-day free trial, you will be charged $8.99/month. Cancel anytime. No charge until trial ends.'
+            }
           </Text>
 
           {/* Trust badges */}
@@ -734,7 +773,7 @@ export default function PremiumScreen() {
             )}
           </Animated.View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 }
