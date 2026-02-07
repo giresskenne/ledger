@@ -3,6 +3,7 @@ import type {
   MarketDataResult,
   PriceData,
   HistoricalData,
+  HistoricalPrice,
   FXRate,
   MarketDataProvider,
 } from './types';
@@ -251,6 +252,104 @@ function createManualPriceData(asset: Asset): MarketDataResult<PriceData> {
 // ============================================
 // Historical Data
 // ============================================
+
+/**
+ * Get the closing price of a ticker on a specific date (or nearest prior trading day).
+ * Useful for auto-filling purchase price when user picks a past purchase date.
+ */
+export async function getPriceOnDate(
+  ticker: string,
+  date: Date,
+  category: AssetCategory,
+  country?: string,
+  currency: Currency = 'USD'
+): Promise<MarketDataResult<{ price: number; date: string }>> {
+  const strategy = getProviderForCategory(category);
+
+  // Only supported for tickers with a data provider
+  if (strategy === 'manual') {
+    return { ok: false, reason: 'Historical pricing not available for this asset type' };
+  }
+
+  // Calculate how many days ago the target date is (add buffer for weekends/holidays)
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) {
+    return { ok: false, reason: 'Cannot fetch future prices' };
+  }
+  // Fetch enough history to cover the date + buffer for non-trading days
+  const daysToFetch = Math.max(diffDays + 10, 30);
+
+  let historicalResult: MarketDataResult<HistoricalData>;
+
+  switch (strategy) {
+    case 'stooq':
+      historicalResult = await fetchStooqHistorical(ticker, country, daysToFetch);
+      break;
+    case 'stooq_raw':
+      historicalResult = await fetchStooqRawHistorical(ticker, daysToFetch);
+      break;
+    case 'alphavantage_crypto':
+      historicalResult = await fetchCryptoHistorical(ticker, currency, daysToFetch);
+      break;
+    default:
+      return { ok: false, reason: 'No provider available' };
+  }
+
+  if (!historicalResult.ok) {
+    return { ok: false, reason: historicalResult.reason };
+  }
+
+  const prices = historicalResult.data.prices;
+  if (!prices || prices.length === 0) {
+    return { ok: false, reason: 'No historical data available' };
+  }
+
+  // Target date string (YYYY-MM-DD)
+  const targetDateStr = date.toISOString().slice(0, 10);
+
+  // Find exact match first
+  const exactMatch = prices.find((p) => p.date === targetDateStr);
+  if (exactMatch) {
+    return { ok: true, data: { price: exactMatch.close, date: exactMatch.date } };
+  }
+
+  // Find closest prior trading day (the last trading day <= target date)
+  const targetTime = date.getTime();
+  let closest: HistoricalPrice | null = null;
+  let closestDiff = Infinity;
+
+  for (const p of prices) {
+    const pTime = new Date(p.date).getTime();
+    const diff = targetTime - pTime;
+    // Only consider dates on or before the target
+    if (diff >= 0 && diff < closestDiff) {
+      closestDiff = diff;
+      closest = p;
+    }
+  }
+
+  // If no prior date found, take the earliest available date after target
+  if (!closest) {
+    let earliestAfter: HistoricalPrice | null = null;
+    let earliestDiff = Infinity;
+    for (const p of prices) {
+      const pTime = new Date(p.date).getTime();
+      const diff = pTime - targetTime;
+      if (diff >= 0 && diff < earliestDiff) {
+        earliestDiff = diff;
+        earliestAfter = p;
+      }
+    }
+    if (earliestAfter) {
+      return { ok: true, data: { price: earliestAfter.close, date: earliestAfter.date } };
+    }
+    return { ok: false, reason: 'No price data found near this date' };
+  }
+
+  return { ok: true, data: { price: closest.close, date: closest.date } };
+}
 
 export async function fetchAssetHistorical(
   asset: Asset,

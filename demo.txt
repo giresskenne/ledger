@@ -1,0 +1,52 @@
+<speak>
+    Hi there. <break time="500ms"/>
+    I love investing, but honestly, my portfolio was a disaster <break time="300ms"/> spread across five different apps and messy Excel sheets.
+    <break time="600ms"/>
+    
+    That's why I built Ledger, inspired by an idea from Josh at VisualFaktory. <break time="400ms"/>
+    It's a single, offline-first home for every asset you own.
+    <break time="600ms"/>
+    
+    Here are the five coolest features. <break time="400ms"/>
+    One: Time-travel pricing. Bought Apple six years ago? We fetch that exact historical price. <break time="300ms"/>
+    Two: Smart event timeline. Never miss a maturity date, dividend, or contribution deadline. <break time="300ms"/>
+    Three: Tax account autopilot. Max out your <sub alias="T F S A">TFSA</sub>, IRA, or ISA without doing the math. <break time="300ms"/>
+    Four: Risk analysis that shows your blind spots. Eighty percent exposed to US tech? We'll warn you. <break time="300ms"/>
+    And five: Track everything. From stocks to gold bars to real estate, all in one dashboard.
+    <break time="600ms"/>
+    Let me show you how they work.
+    <break time="800ms"/>
+
+    I tap add, <break time="200ms"/> search for Apple, <break time="300ms"/> and select the date I bought it six years ago. <break time="500ms"/>
+    Watch this. <break time="300ms"/>
+    Ledger automatically fetches the historical closing price from that exact trading day.
+    <break time="400ms"/>
+    I enter the quantity, hit save, <break time="200ms"/> and it calculates my cost basis and current gain instantly.
+    <break time="800ms"/>
+
+    But a truly diversified portfolio includes non-listed assets. <break time="400ms"/>
+    I'll select "Manual Asset", type in "Gold Bar", enter its value, and add it. <break time="400ms"/>
+    Now my physical assets live right next to my stocks.
+    <break time="800ms"/>
+
+    In the Events tab, I see a smart timeline. <break time="400ms"/>
+    A Fixed Income Bond is amortizing in two weeks. <break time="300ms"/>
+    I also see dividend payouts and contribution reminders, <break time="200ms"/> all automatically calculated.
+    <break time="800ms"/>
+
+    Let's use a Canadian <sub alias="T F S A">TFSA</sub> as an example. <break time="400ms"/>
+    In the Accounts tab, it tracks my contribution room. <break time="400ms"/>
+    I enable Autopilot, set a savings target, <break time="300ms"/> and Ledger calculates exactly how much I need to contribute each month to max out my tax-free growth.
+    <break time="800ms"/>
+
+    With premium Risk Analysis, I can see if I'm too heavy in one market. <break time="400ms"/>
+    For example, it shows I'm highly exposed to the US. <break time="300ms"/>
+    That's a concentration risk I might not have noticed otherwise.
+    <break time="600ms"/>
+    And for security, the app is protected with biometric lock, <break time="200ms"/> so only I can access my portfolio.
+    <break time="800ms"/>
+
+    So that's Ledger. <break time="400ms"/>
+    It takes the mess of modern investing and turns it into a clean, actionable system.
+    Thanks for watching.
+</speak>
