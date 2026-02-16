@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -106,8 +107,10 @@ import {
   RegisteredAccountType,
 } from '@/lib/types';
 import { cn } from '@/lib/cn';
+import { LEDGER_DONE_ACCESSORY_ID } from '@/components/KeyboardDoneToolbar';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const DONE_ACCESSORY_ID = Platform.OS === 'ios' ? LEDGER_DONE_ACCESSORY_ID : undefined;
 
 // ==================== CINEMATIC SLIDES ====================
 
@@ -527,6 +530,7 @@ function CountrySelectionStep({ onNext, onBack }: { onNext: () => void; onBack: 
             onChangeText={setSearchQuery}
             placeholder="Find your country"
             placeholderTextColor="rgba(255,255,255,0.4)"
+            inputAccessoryViewID={DONE_ACCESSORY_ID}
             style={styles.searchInputDark}
           />
         </View>
@@ -1189,6 +1193,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                 onChangeText={setName}
                 placeholder={formCopy.namePlaceholder}
                 placeholderTextColor="#6B7280"
+                inputAccessoryViewID={DONE_ACCESSORY_ID}
                 style={{
                   backgroundColor: 'rgba(255,255,255,0.1)',
                   borderRadius: 12,
@@ -1216,6 +1221,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   }}
                   placeholder="e.g., AAPL, VOO, BTC"
                   placeholderTextColor="#6B7280"
+                  inputAccessoryViewID={DONE_ACCESSORY_ID}
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
                     borderRadius: 12,
@@ -1279,6 +1285,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                       onChangeText={setQuantity}
                       placeholder={formCopy.quantityPlaceholder}
                       placeholderTextColor="#6B7280"
+                      inputAccessoryViewID={DONE_ACCESSORY_ID}
                       style={{
                         backgroundColor: 'rgba(255,255,255,0.1)',
                         borderRadius: 12,
@@ -1297,6 +1304,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                     onChangeText={setPurchasePrice}
                     placeholder="0.00"
                     placeholderTextColor="#6B7280"
+                    inputAccessoryViewID={DONE_ACCESSORY_ID}
                     style={{
                       backgroundColor: 'rgba(255,255,255,0.1)',
                       borderRadius: 12,
@@ -1317,6 +1325,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                   onChangeText={setCurrentPrice}
                   placeholder="0.00"
                   placeholderTextColor="#6B7280"
+                  inputAccessoryViewID={DONE_ACCESSORY_ID}
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.1)',
                     borderRadius: 12,
@@ -1423,6 +1432,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                       onChangeText={setInterestRate}
                       placeholder="e.g., 5.25"
                       placeholderTextColor="#6B7280"
+                      inputAccessoryViewID={DONE_ACCESSORY_ID}
                       style={{
                         backgroundColor: 'rgba(255,255,255,0.1)',
                         borderRadius: 12,
@@ -1445,6 +1455,7 @@ function FirstAssetStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                     onChangeText={setAddress}
                     placeholder="123 Main St, City, State"
                     placeholderTextColor="#6B7280"
+                    inputAccessoryViewID={DONE_ACCESSORY_ID}
                     style={{
                       backgroundColor: 'rgba(255,255,255,0.1)',
                       borderRadius: 12,
@@ -1628,6 +1639,7 @@ function RegisteredAccountsStep({ onNext, onBack }: { onNext: () => void; onBack
                               placeholderTextColor="#6B7280"
                               keyboardType="decimal-pad"
                               style={styles.contributionInput}
+                              inputAccessoryViewID={DONE_ACCESSORY_ID}
                             />
                           </View>
                         </View>
@@ -2121,9 +2133,10 @@ function BiometricPermissionStep({ onNext, onBack }: { onNext: () => void; onBac
 
 // ==================== CALENDAR PERMISSION STEP ====================
 // Beautiful calendar permission request with floating event animations
-function CalendarPermissionStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+function CalendarPermissionStep({ onNext }: { onNext: () => void }) {
   const insets = useSafeAreaInsets();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [showSettingsPrompt, setShowSettingsPrompt] = useState(false);
   
   // Animated values for floating calendar events
   const event1Y = useSharedValue(0);
@@ -2195,24 +2208,53 @@ function CalendarPermissionStep({ onNext, onBack }: { onNext: () => void; onBack
   const handleEnable = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsRequesting(true);
+    setShowSettingsPrompt(false);
 
     try {
+      // Check current status first so we can handle previously denied permissions clearly.
+      const existingPermission = await Calendar.getCalendarPermissionsAsync();
+
+      if (existingPermission.status === 'granted') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onNext();
+        return;
+      }
+
+      // If iOS won't show the native prompt again, guide users to Settings instead of silently proceeding.
+      if (!existingPermission.canAskAgain && existingPermission.status !== 'undetermined') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setShowSettingsPrompt(true);
+        return;
+      }
+
       const { status } = await Calendar.requestCalendarPermissionsAsync();
-      
       if (status === 'granted') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onNext();
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        onNext();
+        return;
       }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setShowSettingsPrompt(true);
     } catch (error) {
       console.log('Calendar permission error:', error);
-      onNext();
+      // If permission checks fail, still give a direct Settings path.
+      setShowSettingsPrompt(true);
+    } finally {
+      setIsRequesting(false);
     }
   };
 
-  const handleSkip = () => {
+  const handleOpenSettings = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await Linking.openSettings();
+    } catch (error) {
+      console.log('Calendar settings open error:', error);
+    }
+  };
+
+  const handleContinueWithoutCalendar = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onNext();
   };
@@ -2272,13 +2314,10 @@ function CalendarPermissionStep({ onNext, onBack }: { onNext: () => void; onBack
 
       {/* Header */}
       <View style={[styles.darkHeader, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={onBack} style={styles.darkBackButton}>
-          <ChevronLeft size={24} color="white" />
-        </Pressable>
+        {/* Keep spacers in place so the step title area remains visually centered. */}
         <View style={{ width: 36 }} />
-        <Pressable onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
-        </Pressable>
+        <View style={{ width: 36 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       <View style={styles.setupDarkContent}>
@@ -2341,12 +2380,28 @@ function CalendarPermissionStep({ onNext, onBack }: { onNext: () => void; onBack
                 <ActivityIndicator color="white" />
               ) : (
                 <>
-                  <Text style={styles.setupButtonText}>Enable Calendar Access</Text>
+                  <Text style={styles.setupButtonText}>Continue</Text>
                   <CalendarIcon size={20} color="white" />
                 </>
               )}
             </LinearGradient>
           </Pressable>
+          {showSettingsPrompt && (
+            <View style={styles.permissionSettingsCard}>
+              <Text style={styles.permissionSettingsTitle}>Calendar access is off</Text>
+              <Text style={styles.permissionSettingsDescription}>
+                To auto-add investment events, turn on calendar access in Settings.
+              </Text>
+              <View style={styles.permissionSettingsActions}>
+                <Pressable onPress={handleOpenSettings} style={styles.permissionSettingsButton}>
+                  <Text style={styles.permissionSettingsButtonText}>Open Settings</Text>
+                </Pressable>
+                <Pressable onPress={handleContinueWithoutCalendar} style={styles.permissionContinueButton}>
+                  <Text style={styles.permissionContinueButtonText}>Continue for now</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
           <Text style={styles.notificationDisclaimer}>
             You can change this in Settings anytime.
           </Text>
@@ -3175,7 +3230,7 @@ export default function OnboardingScreen() {
         <BiometricPermissionStep onNext={handleNext} onBack={handleBack} />
       )}
       {currentStep === 'calendar_permission' && (
-        <CalendarPermissionStep onNext={handleNext} onBack={handleBack} />
+        <CalendarPermissionStep onNext={handleNext} />
       )}
       {currentStep === 'notifications' && (
         <NotificationsStep onNext={handleNext} onBack={handleBack} />
@@ -4026,6 +4081,51 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
   },
+  permissionSettingsCard: {
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    padding: 14,
+  },
+  permissionSettingsTitle: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  permissionSettingsDescription: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  permissionSettingsActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 10,
+  },
+  permissionSettingsButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  permissionSettingsButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  permissionContinueButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  permissionContinueButtonText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 
   // Room Reveal
   roomRevealList: {
@@ -4154,6 +4254,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+  },
+
+  // Keyboard Accessory for Done button
+  keyboardAccessory: {
+    backgroundColor: '#374151',
+    borderTopWidth: 1,
+    borderTopColor: '#4B5563',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  keyboardDoneButton: {
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  keyboardDoneText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   premiumFeatureText: {
     color: 'white',
